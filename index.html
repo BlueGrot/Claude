@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=135,REV_DATE='2026-10-24';
+const REV=136,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -474,6 +474,15 @@ const SMP={buf:{},
 // overdrive mix: input drive into the clipper, and the dry/wet levels while it is on (wet is level-matched by measurement)
 const OD={pre:2.2,dry:0.25,wet:0.22};   // measured: driven mix sits 0.1-0.7 dB RMS under clean, peaks ~5 dB lower
 const AU={ctx:null,out:null,rev:null,noise:null,
+  // power-up sound: echo (delay), hall (CONDUCTOR: the reverb swells), pres (MONITOR WEDGE), air (SPOTLIGHT), gulp (WATER BOTTLE), riser (GOLD RECORD)
+  fx(k,on,t){if(!this.echoS)return;t=t??this.ctx.currentTime;
+    if(k==='echo')this.echoS.gain.setTargetAtTime(on?0.5:0,t,on?0.08:0.25);
+    else if(k==='hall'){this.hallK=on?2.6:1;this.rev.gain.setTargetAtTime((this.revBase??0.2)*this.hallK,t,on?0.25:0.6)}   // a multiplier on the groove-driven room level
+    else if(k==='pres')this.fxPres.gain.setTargetAtTime(on?4.5:0,t,0.12);
+    else if(k==='air')this.fxAir.gain.setTargetAtTime(on?6:0,t,on?0.2:0.4);
+    else if(k==='gulp'){const f=this.mlp.frequency;f.cancelScheduledValues(t);f.setValueAtTime(f.value,t);f.exponentialRampToValueAtTime(700,t+0.18);f.exponentialRampToValueAtTime(20000,t+0.75)}
+    else if(k==='riser'){this.whoosh(t);if(this.cheer)this.cheer(t+0.35,1.2)}},
+  fxOff(){for(const k of ['echo','hall','pres','air'])this.fx(k,false)},
   drive(on,t){if(!this.odWet)return;t=t??this.ctx.currentTime;this.odDry.gain.setTargetAtTime(on?OD.dry:1,t,0.06);this.odWet.gain.setTargetAtTime(on?OD.wet:0,t,0.06)},
   init(){
     if(navigator.audioSession)try{navigator.audioSession.type='playback'}catch(e){}   // iOS 17+: play through the silent switch, like a music app
@@ -486,13 +495,20 @@ const AU={ctx:null,out:null,rev:null,noise:null,
       // master tilt: +1 dB below 100 Hz, -1.5 dB above 9 kHz, to take the digital edge off the synths
       {const lo=c.createBiquadFilter(),hi=c.createBiquadFilter();lo.type='lowshelf';lo.frequency.value=100;lo.gain.value=1;hi.type='highshelf';hi.frequency.value=9000;hi.gain.value=-1.5;this.out.connect(lo);lo.connect(hi);hi.connect(this.mlp)}
       // OVERDRIVE: dry and driven paths in parallel, crossfaded; the driven one is level-matched to the dry mix
-      this.odDry=c.createGain();this.odDry.gain.value=1;this.mlp.connect(this.odDry);this.odDry.connect(comp);
+      // POWER-UP STAGE after the low-pass: a presence bump (MONITOR WEDGE) and an air shelf (SPOTLIGHT); ECHO PEDAL is a tempo-synced
+      // 8th-note delay fed from the mix and returned into the low-pass (so it can't feed itself through the mix)
+      {const pr=c.createBiquadFilter(),air=c.createBiquadFilter();pr.type='peaking';pr.frequency.value=2200;pr.Q.value=0.8;pr.gain.value=0;air.type='highshelf';air.frequency.value=6500;air.gain.value=0;
+       this.mlp.connect(pr);pr.connect(air);this.fxPres=pr;this.fxAir=air;this.fxOut=air;
+       const es=c.createGain(),ed=c.createDelay(2),ef=c.createGain(),ehp=c.createBiquadFilter(),elp=c.createBiquadFilter();es.gain.value=0;ed.delayTime.value=0.25;ef.gain.value=0.42;
+       ehp.type='highpass';ehp.frequency.value=280;elp.type='lowpass';elp.frequency.value=3800;
+       this.out.connect(es);es.connect(ehp);ehp.connect(ed);ed.connect(elp);elp.connect(ef);ef.connect(ed);elp.connect(this.mlp);this.echoS=es;this.echoT=ed}
+      this.odDry=c.createGain();this.odDry.gain.value=1;this.fxOut.connect(this.odDry);this.odDry.connect(comp);
       this.odPre=c.createGain();this.odPre.gain.value=OD.pre;
       const odHp=c.createBiquadFilter();odHp.type='highpass';odHp.frequency.value=90;   // keep the sub out of the clipper so it stays tight
       this.odSh=c.createWaveShaper();this.odSh.oversample='4x';{const n=2048,cv_=new Float32Array(n);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;cv_[i]=Math.tanh(x*3+0.15)-Math.tanh(0.15)}this.odSh.curve=cv_}
       const odTone=c.createBiquadFilter();odTone.type='lowpass';odTone.frequency.value=5200;odTone.Q.value=0.7;
       this.odWet=c.createGain();this.odWet.gain.value=0;
-      this.mlp.connect(this.odPre);this.odPre.connect(odHp);odHp.connect(this.odSh);this.odSh.connect(odTone);odTone.connect(this.odWet);this.odWet.connect(comp);
+      this.fxOut.connect(this.odPre);this.odPre.connect(odHp);odHp.connect(this.odSh);this.odSh.connect(odTone);odTone.connect(this.odWet);this.odWet.connect(comp);
       // safety limiter after the glue compressor so dense choruses can't clip the output
       const lim=c.createDynamicsCompressor();lim.threshold.value=-2;lim.knee.value=0;lim.ratio.value=20;lim.attack.value=0.001;lim.release.value=0.08;comp.connect(lim);const post=c.createGain();post.gain.value=0.708;lim.connect(post);post.connect(c.destination);this.lim=lim;   // 3 dB headroom under full scale: hot, bright transients overshoot between samples and clip in DACs and Bluetooth codecs
       const b=c.createBuffer(1,c.sampleRate,c.sampleRate),d=b.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;this.noise=b;
@@ -1748,7 +1764,7 @@ function reset(){
   tracks=[];
   enemies=[];bullets=[];ebullets=[];gems=[];rings=[];auras=[];parts=[];texts=[];toasts=[];orbs=[];beams=[];cones=[];
   t=0;kills=0;shake=0;pendingLevels=0;bossCount=0;lvlCd=0;vacT=0;micT=0;melPending=0;melSched=0;barMel=false;autoMel=-1;
-  PU={conductor:0,overdrive:0,wedge:0,echo:0,tape:0,spin:0,spot:0};TAPE=1;puT=0;puBag=[];noNew=0;nextPU=55;echoQ=[];if(AU.ctx)AU.drive(false);if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05);endless=false;encoreN=0;
+  PU={conductor:0,overdrive:0,wedge:0,echo:0,tape:0,spin:0,spot:0};TAPE=1;puT=0;puBag=[];noNew=0;nextPU=55;echoQ=[];if(AU.ctx){AU.drive(false);AU.fxOff()}if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05);endless=false;encoreN=0;
   groove=0;hitsThisBar=0;streak=0;bestStreak=0;killQ=0;
   QN=0;metaEntry=-1;SI=0;SB=0;SIB=0;schedDone=false;keyShift=0;bpmAdd=0;events=[];hitQ=[];melQ=[];beatTimes=[];padVoice=null;leadN=0;
   HS=0;HE=null;heardL=16;sectionsPlayed=0;entry=0;startedEntry=-1;lastJudged=-1;
@@ -1964,6 +1980,7 @@ function scheduleAudio(ev){
   if(amb&&ib===0&&AU.ppL){const q=60/secBpm(ev.si)*0.75;AU.ppL.delayTime.setTargetAtTime(q,tm,0.05);AU.ppR.delayTime.setTargetAtTime(q,tm,0.05)}
   if(amb&&ib%2===0&&Math.random()<(bloom?0.55:s.type==='intro'?0.2:0.3)){const p=leadPool(ch);E('bell',{m:p[Math.random()*p.length|0]+12,vel:0.5*lvl})}   // bell twinkles through the delays
   if(ib===0&&AU.dlyT)AU.dlyT.delayTime.setTargetAtTime(60/secBpm(ev.si)*0.75,tm,0.05);
+  if(ib===0&&AU.echoT)AU.echoT.delayTime.setTargetAtTime(60/secBpm(ev.si)*0.5,tm,0.05);   // ECHO PEDAL: an 8th note
   const last=ev.sb===s.bars-1,nxt=SETLIST[ev.si+1];
   if(!ev.frozen){
     if(last&&ib===0&&nxt&&(nxt.type==='chorus'||nxt.type==='finale'))E('riser',{dur:sd*s.L});
@@ -1973,7 +1990,7 @@ function scheduleAudio(ev){
   }
   if(bd&&(ib===4||ib===12))E('rim',{});
   if(killQ>0){killQ=0;const p=leadPool(ch);E('sparkle',{m:p[Math.random()*p.length|0]+12,vel:0.6})}
-  if(AU.rev)AU.rev.gain.setTargetAtTime(0.16+groove*0.05+(bd?0.15:0),tm,0.4);
+  if(AU.rev){AU.revBase=0.16+groove*0.05+(bd?0.15:0);AU.rev.gain.setTargetAtTime(AU.revBase*(AU.hallK||1),tm,0.4)}
 }
 function genreBar(){   // each bar: ALIAS folds across you every other bar, DRONE sends a slow pulse
   for(const e of enemies){if(e.dead)continue;
@@ -2133,15 +2150,15 @@ function applyPU(id){
   FX.pops.push({x:P.x,y:P.y,r:P.r,max:P.r*6,col:p.col,life:0.5,l0:0.5});
   switch(id){
     case'melody':pickMic();return;
-    case'conductor':PU.conductor=10;break;
+    case'conductor':PU.conductor=10;AU.fx('hall',true);break;
     case'overdrive':PU.overdrive=8;AU.drive(true);break;
-    case'wedge':PU.wedge=2;break;
-    case'echo':PU.echo=8;break;
+    case'wedge':PU.wedge=2;AU.fx('pres',true);break;
+    case'echo':PU.echo=8;AU.fx('echo',true);break;
     case'sub':rings.push({x:P.x,y:P.y,r:10,max:Math.max(VW,VH)*0.75,dmg:(12+P.lvl*1.5)*P.dmg,hit:new Set(),col:p.col,push:260});AU.boom(1.4);AU.kick(AU.soon(),1,kickHz(HS,HE&&HE.ch));shake=12;FX.flashT=1;break;
     case'tape':PU.tape=TAPE_LEN;PU.spin=0;break;
-    case'water':P.hp=Math.min(P.maxHp,P.hp+P.maxHp*0.2);break;
-    case'spot':PU.spot=7;break;
-    case'gold':gainXp(Math.max(1,P.next-P.xp));break;
+    case'water':P.hp=Math.min(P.maxHp,P.hp+P.maxHp*0.2);if(PU.tape<=0&&PU.spin<=0)AU.fx('gulp',true);break;
+    case'spot':PU.spot=7;AU.fx('air',true);break;
+    case'gold':gainXp(Math.max(1,P.next-P.xp));AU.fx('riser',true);break;
   }
   toasts.push({s:p.name,col:p.col,life:1.6});
 }
@@ -2447,7 +2464,7 @@ function update(dt){
 
   // power-up timers and effects
   if(PU.overdrive>0&&PU.overdrive-dt<=0)AU.drive(false);   // the amp drops back to clean
-  for(const k of ['conductor','overdrive','echo','spot'])if(PU[k]>0)PU[k]=Math.max(0,PU[k]-dt);
+  for(const k of ['conductor','overdrive','echo','spot'])if(PU[k]>0){PU[k]=Math.max(0,PU[k]-dt);if(PU[k]===0&&k!=='overdrive')AU.fx({conductor:'hall',echo:'echo',spot:'air'}[k],false)}
   if(PU.tape>0){PU.tape=Math.max(0,PU.tape-dt);if(PU.tape>0){TAPE=tapeCurve(tapeK());if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000*Math.pow(700/20000,tapeK()),AU.ctx.currentTime,0.05)}else PU.spin=SPIN_LEN}
   else if(PU.spin>0){PU.spin=Math.max(0,PU.spin-dt);TAPE=spinCurve(1-PU.spin/SPIN_LEN);if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000*Math.pow(700/20000,(1-TAPE)/0.55),AU.ctx.currentTime,0.05)}   // spin back up
   for(let i=echoQ.length-1;i>=0;i--)if(t>=echoQ[i].at){const e=echoQ[i];echoQ.splice(i,1);const tr=trackOf(e.id);if(tr)fire(tr,e.h,e.bd,0.6)}
@@ -2496,7 +2513,7 @@ function update(dt){
   if(pendingLevels>0)openLevelUp();
 }
 function damagePlayer(d){
-  if(PU.wedge>0){PU.wedge--;P.inv=0.5;FX.pops.push({x:P.x,y:P.y,r:P.r+10,max:P.r*4,col:'#7aa2ff',life:0.4,l0:0.4});AU.clap(0.7);return}   // the wedge takes it
+  if(PU.wedge>0){PU.wedge--;if(!PU.wedge)AU.fx('pres',false);P.inv=0.5;FX.pops.push({x:P.x,y:P.y,r:P.r+10,max:P.r*4,col:'#7aa2ff',life:0.4,l0:0.4});AU.clap(0.7);return}   // the wedge takes it
   if(DARE==='loud')d*=1.35;
   padRumble(0.35,0.6,140);
   secHurt=true;DMG30[0]+=Math.max(1,d-P.armor);P.hp-=Math.max(1,d-P.armor);P.inv=0.9;
@@ -2716,7 +2733,7 @@ function preShow(){
   state='pre';setTimeout(()=>{if(state!=='pre')return;if(PAD.used)padFocus($('preGo'));else $('preGo').focus({preventScroll:true})},0);
 }
 function fxOff(){   // power-up audio (overdrive, tape stop) and the feedback howl never outlive the show
-  AU.howl(0);AU.crowd(0);if(AU.ctx)AU.tide(false,AU.ctx.currentTime);PU.overdrive=0;PU.tape=0;PU.spin=0;TAPE=1;if(AU.ctx){AU.drive(false);if(AU.mlp)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05)}
+  AU.howl(0);AU.crowd(0);if(AU.ctx)AU.tide(false,AU.ctx.currentTime);PU.overdrive=0;PU.tape=0;PU.spin=0;TAPE=1;if(AU.ctx){AU.drive(false);AU.fxOff();if(AU.mlp)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05)}
 }
 function endRun(won){
   if(DEMO){exitDemo();return}   // a demo show just ends back on the title
