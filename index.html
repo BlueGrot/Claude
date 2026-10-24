@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=133,REV_DATE='2026-10-24';
+const REV=134,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -1441,8 +1441,9 @@ function bookSec(song,role,v){const sec=song.sec[BOOK_ROLE[role]||'verse'];let p
 const bookAll=()=>SONGBOOK.concat((META.songs||[]).map(x=>({...x,mine:true})));   // the songbook plus the songs you've imported (META.songs)
 function bookPick(n,ok){
   const fresh=a=>a.slice().sort(()=>Math.random()-0.5).sort((x,y)=>SONG_RECENT.includes(x.name)-SONG_RECENT.includes(y.name));
-  let pool=fresh(bookAll().filter(ok)),out=[];
-  while(out.length<n){if(!pool.length)pool=fresh(bookAll().filter(ok));out.push(pool.shift())}
+  const okAll=()=>{const a=bookAll().filter(ok);return a.length?a:bookAll()};   // a filter that leaves nothing falls back to the whole songbook
+  let pool=fresh(okAll()),out=[];
+  while(out.length<n){if(!pool.length)pool=fresh(okAll());out.push(pool.shift())}
   {const mine=fresh((META.songs||[]).filter(ok));if(mine.length&&!out.some(x=>x.mine))out[0]=mine[0]}   // one of your own songs in every show
   if(n>1&&!out[n-1].big){const i=out.findIndex((x,k)=>k<n-1&&x.big),b=pool.findIndex(x=>x.big);if(i>=0)[out[i],out[n-1]]=[out[n-1],out[i]];else if(b>=0)out[n-1]=pool.splice(b,1)[0]}
   SONG_RECENT=[...out.map(x=>x.name),...SONG_RECENT].slice(0,6);
@@ -1485,7 +1486,8 @@ function generateSet(v){
   if(SOUND==='trance'&&!v.ambient&&!v.trance)v={...v,trance:true,bpm:[136,140],forms:['trance'],odd:['4/4']};
   if(SOUND==='ambient'&&!v.slow)v={...v,ambient:true,slow:true,bpm:[62,74],forms:['ambient'],odd:['4/4']};   // AMBIENT tier: every venue plays slow ambient songs
   const out=[];let lastStart=0;
-  const book=v.ambient||v.gen?null:bookPick(v.songs,x=>!v.trance||x.mode==='minor');   // every stage but the ambient ones plays the songbook
+  const loud=(v.id==='club'||v.id==='festival')&&!v.trance&&!v.vapor;   // the club and Main Stage play the uptempo songs: a 72 bpm ballad there sounded like the ambient stage
+  const book=v.ambient||v.gen?null:bookPick(v.songs,x=>(!v.trance||x.mode==='minor')&&(!loud||x.mine||x.bpm>=98));   // every stage but the ambient ones plays the songbook
   const bpms=Array.from({length:v.songs},(_,n)=>book?bookBpm(book[n],v):v.bpm[0]+Math.floor(Math.random()*(v.bpm[1]-v.bpm[0]+1)));if(!book)bpms.sort((a,b)=>a-b);
   for(let n=0;n<v.songs;n++){
     const final=n===v.songs-1,song=book&&book[n],mode=song?song.mode:v.ambient||v.vapor?'major':v.trance||v.rave||Math.random()<0.6?'minor':'major',key=Math.random()*12|0,
