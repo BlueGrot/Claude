@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=137,REV_DATE='2026-10-24';
+const REV=138,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -483,6 +483,18 @@ const AU={ctx:null,out:null,rev:null,noise:null,
     else if(k==='gulp'){const f=this.mlp.frequency;f.cancelScheduledValues(t);f.setValueAtTime(f.value,t);f.exponentialRampToValueAtTime(700,t+0.18);f.exponentialRampToValueAtTime(20000,t+0.75)}
     else if(k==='riser'){this.whoosh(t);if(this.cheer)this.cheer(t+0.35,1.2)}},
   fxOff(){for(const k of ['echo','hall','pres','air'])this.fx(k,false)},
+  // BIG BOOM (THE DROP, SUB DROP): a sine sub sweeping 110 → 38 Hz with a long tail, plus a saturated copy of it, whose harmonics
+  // (80–450 Hz) carry the boom on laptop and phone speakers that can't play the sub itself, and a short click on top
+  bigBoom(v=1,at){if(!this.ctx)return;const c=this.ctx,t=at??this.soon(),out=this.ch?this.ch.sfx:this.out,L=1.7;
+    const o=c.createOscillator();o.type='sine';o.frequency.setValueAtTime(110,t);o.frequency.exponentialRampToValueAtTime(38,t+0.38);
+    const env=c.createGain();env.gain.setValueAtTime(0.0001,t);env.gain.exponentialRampToValueAtTime(1,t+0.004);env.gain.setTargetAtTime(0.0001,t+0.12,0.42);o.connect(env);
+    const sub=c.createGain();sub.gain.value=0.42*v;env.connect(sub);sub.connect(out);
+    const sh=c.createWaveShaper();{const n=1024,cv_=new Float32Array(n);for(let i=0;i<n;i++){const x=i/(n-1)*2-1;cv_[i]=Math.tanh(x*5)}sh.curve=cv_}sh.oversample='4x';
+    const hp=c.createBiquadFilter(),lp=c.createBiquadFilter(),sat=c.createGain();hp.type='highpass';hp.frequency.value=85;lp.type='lowpass';lp.frequency.value=2000;sat.gain.value=0.26*v;
+    env.connect(sh);sh.connect(hp);hp.connect(lp);lp.connect(sat);sat.connect(out);
+    const n=c.createBufferSource();n.buffer=this.noise;const nf=c.createBiquadFilter(),ng=c.createGain();nf.type='bandpass';nf.frequency.value=2800;nf.Q.value=0.9;
+    ng.gain.setValueAtTime(0.18*v,t);ng.gain.exponentialRampToValueAtTime(0.0001,t+0.03);n.connect(nf);nf.connect(ng);ng.connect(out);
+    o.start(t);o.stop(t+L);n.start(t);n.stop(t+0.05)},
   drive(on,t){if(!this.odWet)return;t=t??this.ctx.currentTime;this.odDry.gain.setTargetAtTime(on?OD.dry:1,t,0.06);this.odWet.gain.setTargetAtTime(on?OD.wet:0,t,0.06)},
   init(){
     if(navigator.audioSession)try{navigator.audioSession.type='playback'}catch(e){}   // iOS 17+: play through the silent switch, like a music app
@@ -2154,7 +2166,7 @@ function applyPU(id){
     case'overdrive':PU.overdrive=8;AU.drive(true);break;
     case'wedge':PU.wedge=2;AU.fx('pres',true);break;
     case'echo':PU.echo=8;AU.fx('echo',true);break;
-    case'sub':rings.push({x:P.x,y:P.y,r:10,max:Math.max(VW,VH)*0.75,dmg:(12+P.lvl*1.5)*P.dmg,hit:new Set(),col:p.col,push:260});AU.boom(1.4);AU.kick(AU.soon(),1,kickHz(HS,HE&&HE.ch));shake=12;FX.flashT=1;break;
+    case'sub':rings.push({x:P.x,y:P.y,r:10,max:Math.max(VW,VH)*0.75,dmg:(12+P.lvl*1.5)*P.dmg,hit:new Set(),col:p.col,push:260});AU.bigBoom(1.2);AU.kick(AU.soon(),1,kickHz(HS,HE&&HE.ch));shake=12;FX.flashT=1;break;
     case'tape':PU.tape=TAPE_LEN;PU.spin=0;break;
     case'water':P.hp=Math.min(P.maxHp,P.hp+P.maxHp*0.2);if(PU.tape<=0&&PU.spin<=0)AU.fx('gulp',true);break;
     case'spot':PU.spot=7;AU.fx('air',true);break;
@@ -2231,7 +2243,7 @@ function fire0(tr,h,bd,mult=1){
 function pressHeard(e){const lag=e&&e.timeStamp?clamp((performance.now()-e.timeStamp)/1000,0,0.2):0;return AU.now()-AU.lat()-lag}
 function dropGo(){if(state!=='play'||!dropReady()||revel())return;DROP.armed=true;DROP.sec=sectionsPlayed;groove=Math.max(grooveFloor(),groove-4);
   if(AU.ctx&&HE){const bd=60/secBpm(HE.si),left=Math.max(0.2,(HE.L||16)*bd/4-(AU.now()-AU.lat()-HE.t));try{AU.riser(AU.now(),Math.min(2.5,left))}catch(e){}}toasts.push({s:'DROP',sub:perk('anybeat')?'On the next beat':'On the next bar',col:'#ffd166',life:1.2})}
-function dropLand(){DROP.armed=false;DROP.on=true;DROP.left=4;padRumble(0.7,1,260);FX.bloom=1;shake=Math.max(shake,12);AU.boom(1.1);
+function dropLand(){DROP.armed=false;DROP.on=true;DROP.left=4;padRumble(0.7,1,260);FX.bloom=1;shake=Math.max(shake,12);AU.bigBoom(1.1);
   rings.push({x:P.x,y:P.y,r:8,max:380*P.area,dmg:24*P.dmg,hit:new Set(),col:'#ffd166',push:420,band:'all'});P.inv=Math.max(P.inv,0.6)}
 function dash(heard){
   if(DARE==='nodash'||!feat('dash'))return;
@@ -3468,6 +3480,11 @@ function draw(){
   if(mouseGo.on&&!mouseGo.held&&P){g.strokeStyle=`rgba(${pcr},${0.45+0.25*Math.sin(now*10)})`;g.lineWidth=1.5;g.beginPath();g.arc(mouseGo.x,mouseGo.y,7+beatPulse*3,0,6.283);g.stroke()}   // where the orb is heading
   drawTrail(pcr,now);
   if(dashCd>0&&!P.dash){g.strokeStyle=`rgba(${pcr},.35)`;g.lineWidth=2;g.beginPath();g.arc(P.x,P.y,P.r+7,-Math.PI/2,-Math.PI/2+6.283*(1-dashCd/DASH_CD));g.stroke()}   // the dash coming back
+  const dropUp=state==='play'&&dropReady()&&!revel();   // THE DROP is ready: the orb glows gold and trembles
+  if(dropUp){g.save();g.translate(rnd(-1.8,1.8),rnd(-1.8,1.8));
+    const k=0.5+0.5*Math.sin(now*9),gr=P.r*(4.6+1.2*k+beatPulse*1.5),gl=g.createRadialGradient(P.x,P.y,P.r*0.6,P.x,P.y,gr);
+    gl.addColorStop(0,`rgba(255,209,102,${0.6+0.3*k})`);gl.addColorStop(0.45,`rgba(255,160,60,${0.28+0.18*k})`);gl.addColorStop(1,'rgba(255,160,60,0)');
+    g.save();g.globalCompositeOperation='lighter';g.fillStyle=gl;g.beginPath();g.arc(P.x,P.y,gr,0,6.283);g.fill();g.restore()}
   const halo=g.createRadialGradient(P.x,P.y,P.r*0.5,P.x,P.y,P.r*(3.2+beatPulse*1.2));halo.addColorStop(0,`rgba(${pcr},${0.13+beatPulse*0.12})`);halo.addColorStop(1,`rgba(${pcr},0)`);
   g.fillStyle=halo;g.beginPath();g.arc(P.x,P.y,P.r*(3.2+beatPulse*1.2),0,6.283);g.fill();
   const blink=P.inv>0&&Math.floor(P.inv*20)%2===0;
@@ -3478,6 +3495,8 @@ function draw(){
     g.lineWidth=1.5;g.beginPath();g.arc(P.x,P.y,pr*0.6,0,6.283);g.stroke();
     g.fillStyle='#fff';g.beginPath();g.arc(P.x,P.y,pr*0.25,0,6.283);g.fill();
   }
+  if(dropUp){g.strokeStyle=`rgba(255,209,102,${0.55+0.35*Math.sin(now*18)})`;g.lineWidth=2;g.beginPath();g.arc(P.x,P.y,P.r*(1.55+beatPulse*0.3),0,6.283);g.stroke();g.restore()}
+  if(dropUp&&!draw.ready&&PAD.used)padRumble(0.25,0.4,180);draw.ready=dropUp;   // a controller feels it once as it becomes ready
   if(P.fb>0&&state==='play'){   // standing still in a fight: the orb rings red and says so, before and while it hurts
     const k=0.5+0.5*Math.sin(now*14);g.save();g.strokeStyle='#ff4d6d';g.globalAlpha=0.4+0.5*P.fb*k;g.lineWidth=3;g.beginPath();g.arc(P.x,P.y,P.r+10+8*P.fb,0,6.283);g.stroke();g.restore();
     if(pixLook())worldLabels.push({s:'MOVE!',x:P.x,y:P.y-P.r-30,col:'#ff4d6d'});else{g.save();g.fillStyle='#ff4d6d';g.font='bold 12px ui-monospace,Menlo,monospace';g.textAlign='center';g.fillText('MOVE!',P.x,P.y-P.r-22);g.restore()}}
