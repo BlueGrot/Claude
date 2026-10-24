@@ -23,6 +23,7 @@
     const realPU=applyPU;applyPU=function(id){out.pu[id]=(out.pu[id]||0)+1;return realPU(id)};
     const realEnd=endRun;endRun=function(won){out.kills=kills;out.cause=won?'':deathCause;out.daresKept=daresKept+(won&&DARE?1:0);out.reqDone=reqDone;out.pus=puGot;out.won=won;out.avgHype=+(hypeN?hypeAcc/hypeN:1).toFixed(2);out.clipEver=out.clipBars>0;out.t=Math.round(t);out.lvl=P.lvl;ended=true;endRun=realEnd;realEnd(won)};
     DIR_ON=cfg.dirOff?false:true;
+    const realRoll=rollShow;if(cfg.twist)rollShow=function(l){realRoll(l);TWIST=cfg.twist==='none'?null:cfg.twist;if(cfg.twistBand)TWIST_BAND=cfg.twistBand};   // cfg.twist: force a show twist (or 'none')
     start();DEMO=demoObj;musicOn=false;
     // cfg.ai: how a playtester uses the new systems
     //   dash: chance per second to dash when 2+ noise are close · onBeat: chance the dash is timed on the beat
@@ -66,12 +67,13 @@
           if(cfg.twitch&&DEMO&&DEMO.want!=null){DEMO.head=DEMO.want;joy.x=Math.cos(DEMO.head)*60;joy.y=Math.sin(DEMO.head)*60}   // cfg.twitch: instant turning (a sharper dodger than the demo's smooth steering)
           if(state==='play'||state==='levelup'||state==='edit')pump();
           if(state==='play')update(1/40);
+          if(P&&!out.bad&&(!isFinite(P.hp)||!isFinite(P.x)||!isFinite(P.y)||!isFinite(P.xp)||!isFinite(DIR)||P.maxHp<=0))out.bad=`t=${t.toFixed(1)} hp=${P.hp} x=${P.x} xp=${P.xp} dir=${DIR}`;   // a bug: state that should never happen
           if(P)out.minHp=Math.min(out.minHp,P.hp/P.maxHp);if(clipping&&HE&&HE.ib===0&&out._cb!==HE.t){out._cb=HE.t;out.clipBars++}out.maxHype=Math.max(out.maxHype,DIR);
           if(Math.floor(t)%30===0&&out.dir.length<Math.floor(t)/30+1)out.dir.push(+DIR.toFixed(2));
           if(t>=(cfg.maxT||900)){out.t=Math.round(t);out.lvl=P.lvl;out.timeout=true;ended=true;exitDemo();break}
         }
       }catch(e){out.err=e.stack.slice(0,300);ended=true;if(DEMO)exitDemo()}
-      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;openLevelUp=realOpen;applyPU=realPU;DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
+      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;openLevelUp=realOpen;applyPU=realPU;rollShow=realRoll;out.twist=TWIST;out.leans=Object.values(LEANS);DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
     };
     setTimeout(step,0);
   });

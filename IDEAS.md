@@ -44,3 +44,15 @@ Principle: input randomness you can play around (choices, previews) is good; out
 2. Lock/banish + level-up pity.
 3. Power-up shuffle bag + setlist preview.
 4. Show modifiers.
+
+## Playtest swarm (2026-10-24, rev 133)
+
+50 simulated playtesters × ~7 shows each (351 shows, tools/playtest) plus 8 sessions of random keyboard / controller / touch input
+through the real menus. No errors, crashes, impossible states or stuck screens. Longest run without a new instrument: 3 level-ups.
+
+Balance flags (win rates; personas differ in more than one way, so these point at where to look, not at exact causes):
+- AMBIENT sound: 0 / 49, average level 8, dead after ~9 hits. It halves the noise (so half the XP) and doubles damage both ways.
+- MAIN STAGE: 2 / 28. DREAM band 13% vs FOUR / SYNTH 42%. 16-BIT 19% vs 8-BIT 49% and RAVE 59%.
+- PACKED HOUSE looks like a bonus, not a twist (49%, highest level): the +40% XP outweighs the +40% noise.
+- The sim never clips (its loop filler leaves headroom), so clipping is untested by it.
+- The same persona still ranges widely in level reached (e.g. 6–28): an early death caps the level.
