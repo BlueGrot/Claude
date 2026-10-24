@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=142,REV_DATE='2026-10-24';
+const REV=143,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -3731,7 +3731,8 @@ const THEME={bpm:118,
 };
 const TH={on:false,next:0,step:0,bus:null};
 const themeVoice=(set,name)=>set==='chip'?CHIP[name]:set==='fm16'?(FM16[name]||HIFI[name]):set==='trance'?(TRANCE[name]||HIFI[name]):set==='vapor'?(VAPOR[name]||HIFI[name]):(RAVE[name]||HIFI[name]);
-function themeFade(){if(!TH.bus)return;const t=AU.ctx.currentTime,cur=SOUND==='hifi'||!TH.bus[SOUND]?'chip':SOUND;   // the version of the tier actually playingfor(const k in TH.bus)TH.bus[k].gain.setTargetAtTime(k===cur?THEME_LVL[k]:0,t,0.35);
+function themeFade(){if(!TH.bus)return;const t=AU.ctx.currentTime,cur=SOUND==='hifi'||!TH.bus[SOUND]?'chip':SOUND;   // the version of the tier actually playing
+  for(const k in TH.bus)TH.bus[k].gain.setTargetAtTime(k===cur?THEME_LVL[k]:0,t,0.35);
   for(const n of [TH.sendRev,TH.sendPP])n.gain.setTargetAtTime(cur==='ambient'?THEME_LVL.ambient:0,t,0.35);
   for(const k in TH.dly)TH.dly[k].gain.setTargetAtTime(k===cur?THEME_LVL[k]:0,t,0.35);TH.revT.gain.setTargetAtTime(cur==='trance'?THEME_LVL.trance:0,t,0.35);TH.revV.gain.setTargetAtTime(cur==='vapor'?THEME_LVL.vapor:0,t,0.35)}   // each version's echo fades with it   // ~1 s crossfade (the ambient version's reverb and delay sends fade with it)
 const THEME_LVL={chip:0.63,fm16:0.78,rave:1,ambient:0.64,trance:0.88,vapor:1};   // vaporwave measured 0.7 dB under rave dry; its echo and room make up the rest   // trance measured 0.7 dB over rave, plus its room send   // ambient measured 3 dB over rave (sustained pads): set just under it   // the FM version renders 2 dB louder; the 8-bit one sits 4 dB down because it is so bright
@@ -3963,7 +3964,8 @@ function padHoldPress(el){
   return true}
 function padBack(){if(state==='pre'){$('preBack').click();return}if(PAD.hold){PAD.hold=null;renderEditor();holdHint();return}if(state==='edit')closeEditor();else if(state==='paused')pause(false);else if(!$('studio').classList.contains('hidden'))toTitle();else if(state==='won'||state==='dead')toTitle()}
 function padStep(){
-  let gps=[];try{gps=navigator.getGamepads?navigator.getGamepads():[]}catch(e){}let gp=null;   // a page that blocks controllers can throw here: then there are simply nonefor(const x of gps)if(x&&x.connected&&x.mapping==='standard'){gp=x;break}
+  let gps=[];try{gps=navigator.getGamepads?navigator.getGamepads():[]}catch(e){}let gp=null;   // a page that blocks controllers can throw here: then there are simply none
+  for(const x of gps)if(x&&x.connected&&x.mapping==='standard'){gp=x;break}
   if(!gp)for(const x of gps)if(x&&x.connected){gp=x;break}
   PAD.gp=gp;if(!gp){if(PAD.on){PAD.on=false;PAD.x=PAD.y=0}return}PAD.on=true;
   const btn=i=>!!(gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>0.5)),down=i=>btn(i)&&!PAD.prev[i];
