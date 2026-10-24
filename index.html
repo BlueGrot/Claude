@@ -327,7 +327,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=131,REV_DATE='2026-10-24';
+const REV=132,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -1713,7 +1713,7 @@ function reset(){
   tracks=[];
   enemies=[];bullets=[];ebullets=[];gems=[];rings=[];auras=[];parts=[];texts=[];toasts=[];orbs=[];beams=[];cones=[];
   t=0;kills=0;shake=0;pendingLevels=0;bossCount=0;lvlCd=0;vacT=0;micT=0;melPending=0;melSched=0;barMel=false;autoMel=-1;
-  PU={conductor:0,overdrive:0,wedge:0,echo:0,tape:0,spin:0,spot:0};TAPE=1;puT=0;nextPU=55;echoQ=[];if(AU.ctx)AU.drive(false);if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05);endless=false;encoreN=0;
+  PU={conductor:0,overdrive:0,wedge:0,echo:0,tape:0,spin:0,spot:0};TAPE=1;puT=0;puBag=[];noNew=0;nextPU=55;echoQ=[];if(AU.ctx)AU.drive(false);if(AU.mlp&&AU.ctx)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05);endless=false;encoreN=0;
   groove=0;hitsThisBar=0;streak=0;bestStreak=0;killQ=0;
   QN=0;metaEntry=-1;SI=0;SB=0;SIB=0;schedDone=false;keyShift=0;bpmAdd=0;events=[];hitQ=[];melQ=[];beatTimes=[];padVoice=null;leadN=0;
   HS=0;HE=null;heardL=16;sectionsPlayed=0;entry=0;startedEntry=-1;lastJudged=-1;
@@ -2078,9 +2078,13 @@ const PUS={
   gold:     {name:'GOLD RECORD',  col:'#ffcf3f',w:0.25,desc:'Instant level up'}
 };
 const PU_LIFE=14;   // seconds a power-up stays on the floor (it blinks for the last 4)
+let puBag=[];   // power-ups are dealt from a shuffled deck of one of each, so a show can't miss one kind or get the same one again and again
 function randomPU(){
-  const ids=Object.keys(PUS),w=ids.map(id=>PUS[id].w*(id==='water'&&P.hp<P.maxHp*0.4?1.5:1)*(id==='conductor'&&owns('maestro')?0:1));
-  let r=Math.random()*w.reduce((a,b)=>a+b,0),i=0;while(i<w.length-1&&r>w[i]){r-=w[i];i++}return ids[i];
+  if(Math.random()<0.025)return'gold';   // the gold record stays a rare surprise outside the deck
+  puBag=puBag.filter(id=>!(id==='conductor'&&owns('maestro')));
+  if(!puBag.length)puBag=Object.keys(PUS).filter(id=>id!=='gold'&&!(id==='conductor'&&owns('maestro'))).sort(()=>Math.random()-0.5);
+  const wi=puBag.indexOf('water');if(wi>0&&P.hp<P.maxHp*0.4&&Math.random()<0.5)puBag.unshift(puBag.splice(wi,1)[0]);   // low on HP: the water bottle may come up early
+  return puBag.shift();
 }
 function dropPU(id,x,y,near){
   if(near){if(gems.filter(q=>q.pu).length>=2)return;const a=Math.random()*6.283,r=rnd(240,380);x+=Math.cos(a)*r;y+=Math.sin(a)*r}
@@ -2469,7 +2473,7 @@ function gainXp(v){
 }
 
 // ================= LEVEL UP =================
-let choices=[],rerolls=0;
+let choices=[],rerolls=0,noNew=0,newLeft=false;   // noNew: level-ups in a row that offered no new instrument while one was left
 function buildChoices(){
   if(!tracks.length){   // solo start: the first level-up is always a choice of three instruments
     const pool=Object.keys(INST).filter(id=>(!LOCKED_INST[id]||owns(id))&&instHere(id)).sort(()=>Math.random()-0.5);
@@ -2481,9 +2485,11 @@ function buildChoices(){
     if(!tr)opts.push({k:'new',id,w:tracks.length<4?2:1.2});
     else{if(tr.notes-(tr.bonus||0)<instMax(id))opts.push({k:'notes',id,w:1.3});if(tr.lv<5)opts.push({k:'tone',id,w:1})}}
   for(const id in PAS)if(plv(id)<5)opts.push({k:'pas',id,w:0.8});
-  const out=[];
-  while(out.length<(owns('setlist')?4:3)&&opts.length){let s=opts.reduce((a,o)=>a+o.w,0),r=Math.random()*s,i=0;while(i<opts.length-1&&r>opts[i].w){r-=opts[i].w;i++}out.push(opts[i]);opts.splice(i,1)}
-  return out;
+  newLeft=opts.some(o=>o.k==='new');
+  const out=[],pick=os=>{let s=os.reduce((a,o)=>a+o.w,0),r=Math.random()*s,i=0;while(i<os.length-1&&r>os[i].w){r-=os[i].w;i++}return os[i]};
+  if(noNew>=3&&newLeft)out.push(pick(opts.filter(o=>o.k==='new')));   // pity: three level-ups without a new instrument, so this one has one
+  while(out.length<(owns('setlist')?4:3)&&opts.length>out.length){const o=pick(opts.filter(o=>!out.includes(o)));out.push(o)}
+  return out.sort(()=>Math.random()-0.5);
 }
 function cardInfo(o){
   if(o.k==='heal')return['#39ffb6','Bonus','ENCORE SNACK','','Heal to full.'];
@@ -2496,6 +2502,7 @@ function cardInfo(o){
 function openLevelUp(){
   state='levelup';AU.chime();
   choices=buildChoices();if(!choices.length)choices=[{k:'heal'}];
+  noNew=choices.some(o=>o.k==='new')||!newLeft?0:noNew+1;
   renderCards();
   $('lvl').classList.remove('hidden');
 }

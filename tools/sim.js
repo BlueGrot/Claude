@@ -16,6 +16,11 @@
     const realJudge=judge;judge=function(r,...a){if(!a[1])out.judge[r]=(out.judge[r]||0)+1;return realJudge(r,...a)};
     const realHit=hit;if(cfg.bias)hit=function(h){return realHit(h===undefined?h:h+cfg.bias)};
     const realDmg=damagePlayer;damagePlayer=function(d){out.hits++;if(REQ&&REQ.inR)out.reqHits++;return realDmg(d)};
+    // telemetry: level-ups in a row that offered no new instrument (while one was left), and which power-ups were picked up
+    out.dry=0;out.pu={};let dry=0;
+    const realOpen=openLevelUp;openLevelUp=function(){realOpen();const left=Object.keys(INST).some(id=>!trackOf(id)&&(!LOCKED_INST[id]||owns(id))&&instHere(id));
+      if(choices.some(o=>o.k==='new')||!left)dry=0;else out.dry=Math.max(out.dry,++dry)};
+    const realPU=applyPU;applyPU=function(id){out.pu[id]=(out.pu[id]||0)+1;return realPU(id)};
     const realEnd=endRun;endRun=function(won){out.kills=kills;out.cause=won?'':deathCause;out.daresKept=daresKept+(won&&DARE?1:0);out.reqDone=reqDone;out.pus=puGot;out.won=won;out.avgHype=+(hypeN?hypeAcc/hypeN:1).toFixed(2);out.clipEver=out.clipBars>0;out.t=Math.round(t);out.lvl=P.lvl;ended=true;endRun=realEnd;realEnd(won)};
     DIR_ON=cfg.dirOff?false:true;
     start();DEMO=demoObj;musicOn=false;
@@ -66,7 +71,7 @@
           if(t>=(cfg.maxT||900)){out.t=Math.round(t);out.lvl=P.lvl;out.timeout=true;ended=true;exitDemo();break}
         }
       }catch(e){out.err=e.stack.slice(0,300);ended=true;if(DEMO)exitDemo()}
-      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
+      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;openLevelUp=realOpen;applyPU=realPU;DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
     };
     setTimeout(step,0);
   });
