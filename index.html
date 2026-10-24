@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=141,REV_DATE='2026-10-24';
+const REV=142,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -1588,6 +1588,7 @@ const TYPE={
   finale:   {spawn:1.4,dmg:1.2,spd:1.05,d:'Last chorus'}
 };
 const DRUMS={kick:1,snare:1,hat:1,crash:1};
+const brkK=()=>G.break&&VENUE.fast?1.4:1;   // the Breakbeat on the fast stages: kick waves and snare shots hit 40% harder
 
 // ================= DATA =================
 const INST={
@@ -1656,7 +1657,7 @@ const GROOVES=[
   {id:'halftime',name:'Half Time',desc:'One snare, on 3: snare shots hit 80% harder and pierce 1 more.',test:L=>{const n=trackOf('snare');return L===16&&!!n&&at16(n,8)&&hitsIn(n,L)===1}},
   {id:'locked',name:'Locked In',desc:'Kick and bass never play without each other: both hit 35% harder and the kick shoves noise further.',test:L=>{const k=trackOf('kick'),b=trackOf('bass');if(!k||!b||hitsIn(k,L)<2)return false;let ok=true;eachHit(k,L,(beat,f)=>{if(!hitAt(b,beat,f))ok=false});eachHit(b,L,(beat,f)=>{if(!hitAt(k,beat,f))ok=false});return ok}},
   {id:'drive',name:'Driving 16ths',desc:'Hats on every 16th: hat shots pierce 2 more.',test:L=>{const h=trackOf('hat');if(!h)return false;for(let p_=0;p_<L;p_++)if(!at16(h,p_))return false;return true}},
-  {id:'break',name:'Breakbeat',desc:'Kick on 1 and the "and" of 3, snare on 2 and 4: hitting the beat sends out 30% bigger, harder rings (60% on the Warehouse and Stadium).',test:L=>{const k=trackOf('kick'),n=trackOf('snare');return L===16&&!!k&&!!n&&at16(k,0)&&at16(k,10)&&!at16(k,8)&&at16(n,4)&&at16(n,12)}},
+  {id:'break',name:'Breakbeat',desc:'Kick on 1 and the "and" of 3, snare on 2 and 4: hitting the beat sends out 30% bigger, harder rings; on the Warehouse and Stadium 60%, and kick waves and snare shots hit 40% harder.',test:L=>{const k=trackOf('kick'),n=trackOf('snare');return L===16&&!!k&&!!n&&at16(k,0)&&at16(k,10)&&!at16(k,8)&&at16(n,4)&&at16(n,12)}},
   {id:'disco',name:'Disco',desc:'Four on the floor, offbeat hats and a backbeat together: in the pocket goes to ×2.00.',test:L=>L===16&&G.floor&&G.offbeat&&G.backbeat},
   {id:'hatroll',name:'Hat Roll',desc:'A beat of hats in 32nds or 16th triplets (4+ hits): hat shots home in and hit 30% harder.',test:L=>{const h=trackOf('hat');return !!h&&h.beats.some((b,beat)=>(b.div===8||b.div===6)&&b.hits.filter((on,k)=>on===1&&inMeter(beat,k/b.div,L)).length>=4)}},
   {id:'tresillo',name:'Tresillo',desc:'Kick or bass in 3+3+2 (1, the "and" of 2, 4, with 2 and 3 left open): bass waves 30% wider.',test:L=>L===16&&['kick','bass'].some(id=>{const tr=trackOf(id);return !!tr&&at16(tr,0)&&at16(tr,6)&&at16(tr,12)&&!at16(tr,4)&&!at16(tr,8)})},
@@ -2214,10 +2215,10 @@ function fire0(tr,h,bd,mult=1){
   const hold=(G.legato?1.5:1)*(owns('sustain')?1.3:1);
   switch(tr.id){
     case'kick':
-      {const od=G.onedrop?1.5:1;rings.push({x:P.x,y:P.y,r:8,max:61*reach*area*(G.floor?1.2:1)*(gh?0.6:1)*od,dmg:(2+0.9*L)*m*od*(G.locked?1.35:1),hit:new Set(),col,push:(gh?20:55)*(G.locked?1.6:1)});break}
+      {const od=G.onedrop?1.5:1;rings.push({x:P.x,y:P.y,r:8,max:61*reach*area*(G.floor?1.2:1)*(gh?0.6:1)*od,dmg:(2+0.9*L)*m*od*(G.locked?1.35:1)*brkK(),hit:new Set(),col,push:(gh?20:55)*(G.locked?1.6:1)});break}
     case'snare':{
       const tg=aim(520*reach,0.35);if(!tg)break;const n=gh?1:3+(L>>1),base=leadAng(tg,520);
-      for(let i=0;i<n;i++)shoot(base+(i-(n-1)/2)*0.16,520,(2+0.8*L)*m*(G.halftime?1.8:1),1+(G.backbeat?2:0)+(G.halftime?1:0),5,col,0.9*reach);break}
+      for(let i=0;i<n;i++)shoot(base+(i-(n-1)/2)*0.16,520,(2+0.8*L)*m*(G.halftime?1.8:1)*brkK(),1+(G.backbeat?2:0)+(G.halftime?1:0),5,col,0.9*reach);break}
     case'hat':{
       const tg=nearestK(P.x,P.y,480*reach,G.offbeat&&!gh?2:1);
       const roll=G.hatroll&&(tr.beats[h.beat].div===8||tr.beats[h.beat].div===6);
@@ -2740,7 +2741,7 @@ function start(){
   const [focus,hint]=applyBand();recalcGrooves(false);rerolls=mlv('reroll');groove=grooveFloor();
   if(owns('roadcase'))dropPU(randomPU(),P.x,P.y,true);   // the road case: a power-up waiting at the start
   if(!DEMO)for(const k in FEAT_AT)if(META.shows===FEAT_AT[k])toasts.push({s:'NEW · '+FEAT_NAME[k][0],sub:FEAT_NAME[k][1],col:'#ffd166',life:4.5});   // a system arrives
-  if(VENUE.fast&&!DEMO)tip('fast','FAST STAGE','Try the Breakbeat: kick on 1 and the "and" of 3, snare on 2 and 4 · 60% bigger rings here');
+  if(VENUE.fast&&!DEMO)tip('fast','FAST STAGE','Try the Breakbeat: kick on 1 and the "and" of 3, snare on 2 and 4 · kick and snare hit 40% harder here');
   if(TWIST)toasts.push({s:'TWIST · '+twistName(),sub:twistDesc(),col:'#ffd166',life:4});
   ['title','pre','end','pause','lvl','edit','studio'].forEach(id=>$(id).classList.add('hidden'));
   $('seqBtn').classList.remove('hidden');$('pauseBtn').classList.remove('hidden');
