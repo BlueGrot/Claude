@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=140,REV_DATE='2026-10-24';
+const REV=141,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -2011,8 +2011,8 @@ function scheduleAudio(ev){
     // The Stadium shuffles a ride on the 8ths with ghost snares on the "e" of 2, the "a" of 3 and the "a" of 4 (a two-step break);
     // the Warehouse lifts an open hat on every "and".
     if(VENUE.fast&&!amb&&!bd&&s.L===16&&s.type!=='intro'&&secBpm(ev.si)>=138&&!(last&&ib>=s.L-4)){const ht=trackOf('hat'),own=!!ht&&at16(ht,ib);
-      if(VENUE.id==='stadium'){if(ib%2===0&&!own)E('hat',{vel:ib%4===0?0.3:0.2,len:0.09});if(ib===5||ib===11||ib===15)E('snare',{vel:0.22,ghost:1})}
-      else if(ib%4===2&&!own)E('hat',{vel:0.28,len:0.14,open:true})}
+      if(VENUE.id==='stadium'){if(ib%2===0&&!own)E('hat',{vel:ib%4===0?0.38:0.25,len:0.09});if(ib===5||ib===11||ib===15)E('snare',{vel:0.36,ghost:1})}
+      else if(ib%4===2&&!own)E('hat',{vel:0.45,len:0.14,open:true})}
     if(ev.sb===0&&ib===0&&ev.entry!==startedEntry&&(s.type==='chorus'||s.type==='finale')){
       if(amb){E('kick',{vel:0.9,hz:kickHz(ev.si,ch)});E('crash',{chord:padVoice,vel:0.8});E('shimmer',{m:padVoice,dur:sd*s.L,lvl:1})}else E('crash',{vel:0.8})}
   }

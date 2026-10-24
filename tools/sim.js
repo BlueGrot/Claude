@@ -23,6 +23,8 @@
     const realPU=applyPU;applyPU=function(id){out.pu[id]=(out.pu[id]||0)+1;return realPU(id)};
     const realEnd=endRun;endRun=function(won){out.kills=kills;out.cause=won?'':deathCause;out.daresKept=daresKept+(won&&DARE?1:0);out.reqDone=reqDone;out.pus=puGot;out.won=won;out.avgHype=+(hypeN?hypeAcc/hypeN:1).toFixed(2);out.clipEver=out.clipBars>0;out.t=Math.round(t);out.lvl=P.lvl;ended=true;endRun=realEnd;realEnd(won)};
     DIR_ON=cfg.dirOff?false:true;
+    const pref0=JSON.stringify(DEMO_PREF);if(cfg.pref)Object.assign(DEMO_PREF,cfg.pref);   // cfg.pref: where the playtester places each track's notes (16ths, in order), e.g. a Breakbeat
+    out.grooveF={};out.frames=0;
     const realRoll=rollShow;if(cfg.twist)rollShow=function(l){realRoll(l);TWIST=cfg.twist==='none'?null:cfg.twist;if(cfg.twistBand)TWIST_BAND=cfg.twistBand};   // cfg.twist: force a show twist (or 'none')
     start();DEMO=demoObj;musicOn=false;
     // cfg.ai: how a playtester uses the new systems
@@ -64,16 +66,23 @@
             const danger=Math.hypot(fx,fy);if(n&&nd<500){const w=Math.max(0.002,0.012-danger*0.5),dd=Math.hypot(n.x-P.x,n.y-P.y)||1;fx+=(n.x-P.x)/dd*w;fy+=(n.y-P.y)/dd*w}
             const m=Math.hypot(fx,fy)||1;joy.on=true;joy.ox=0;joy.oy=0;joy.x=fx/m*60;joy.y=fy/m*60}
           if(cfg.ai&&state==='play'&&P)aiStep(cfg.ai);
+          // cfg.loop {on:{kick:[0,10]}, off:{kick:[8]}, give:true}: keep these 16ths set (and those clear) all show, adding the tracks if give
+          if(cfg.loop&&state==='play'&&P&&f%20===0){let ch=false;
+            for(const [id,ps] of Object.entries(cfg.loop.on||{})){let tr=trackOf(id);if(!tr&&cfg.loop.give){tr=addTrack(id);ch=true}if(!tr)continue;
+              for(const q of ps){const b=tr.beats[q>>2];if(b.div!==4){b.div=4;b.hits=[0,0,0,0];b.lens=[0,0,0,0]}if(!b.hits[q&3]){b.hits[q&3]=1;ch=true}}tr.notes=Math.max(tr.notes,placed(tr))}
+            for(const [id,ps] of Object.entries(cfg.loop.off||{})){const tr=trackOf(id);if(!tr)continue;for(const q of ps){const b=tr.beats[q>>2];if(b.div===4&&b.hits[q&3]){b.hits[q&3]=0;ch=true}}}
+            if(ch)recalcGrooves(false)}
           if(cfg.twitch&&DEMO&&DEMO.want!=null){DEMO.head=DEMO.want;joy.x=Math.cos(DEMO.head)*60;joy.y=Math.sin(DEMO.head)*60}   // cfg.twitch: instant turning (a sharper dodger than the demo's smooth steering)
           if(state==='play'||state==='levelup'||state==='edit')pump();
           if(state==='play')update(1/40);
           if(P&&!out.bad&&(!isFinite(P.hp)||!isFinite(P.x)||!isFinite(P.y)||!isFinite(P.xp)||!isFinite(DIR)||P.maxHp<=0))out.bad=`t=${t.toFixed(1)} hp=${P.hp} x=${P.x} xp=${P.xp} dir=${DIR}`;   // a bug: state that should never happen
+          if(state==='play'){out.frames++;for(const k in G)if(G[k])out.grooveF[k]=(out.grooveF[k]||0)+1}   // how much of the show each groove was on
           if(P)out.minHp=Math.min(out.minHp,P.hp/P.maxHp);if(clipping&&HE&&HE.ib===0&&out._cb!==HE.t){out._cb=HE.t;out.clipBars++}out.maxHype=Math.max(out.maxHype,DIR);
           if(Math.floor(t)%30===0&&out.dir.length<Math.floor(t)/30+1)out.dir.push(+DIR.toFixed(2));
           if(t>=(cfg.maxT||900)){out.t=Math.round(t);out.lvl=P.lvl;out.timeout=true;ended=true;exitDemo();break}
         }
       }catch(e){out.err=e.stack.slice(0,300);ended=true;if(DEMO)exitDemo()}
-      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;openLevelUp=realOpen;applyPU=realPU;rollShow=realRoll;out.twist=TWIST;out.leans=Object.values(LEANS);DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
+      if(ended){AU.now=rn;endRun=realEnd;judge=realJudge;hit=realHit;damagePlayer=realDmg;openLevelUp=realOpen;applyPU=realPU;rollShow=realRoll;for(const k in DEMO_PREF)delete DEMO_PREF[k];Object.assign(DEMO_PREF,JSON.parse(pref0));for(const k in out.grooveF)out.grooveF[k]=+(out.grooveF[k]/Math.max(1,out.frames)).toFixed(2);out.twist=TWIST;out.leans=Object.values(LEANS);DIR_ON=true;SET.devSet=set0;SET.allTiers=all0;applySound();out.minHp=+out.minHp.toFixed(2);out.secs=sectionsPlayed;out.tracks=tracks.map(x=>x.id+':'+placed(x));out.bands=[...new Set(tracks.map(x=>BAND_INST[x.id]))];out.maxHype=+out.maxHype.toFixed(2);res(out)}else setTimeout(step,0);
     };
     setTimeout(step,0);
   });
