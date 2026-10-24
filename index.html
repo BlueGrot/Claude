@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=134,REV_DATE='2026-10-24';
+const REV=135,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -371,6 +371,7 @@ function discover(id){if(DEMO)return false;if(!META.seen)META.seen={};if(META.se
   if(typeof toasts!=='undefined'&&toasts){const q=toasts.find(x=>x.s==='NEW IN THE STUDIO');const why=FIND_BY[id]||'';if(q){q.sub+=', '+it.name;q.d=q.d&&why?q.d+' · '+why:why||q.d;q.life=Math.max(q.life,2.8)}else toasts.push({s:'NEW IN THE STUDIO',sub:it.name,d:why,col:'#ffd166',life:2.8})}return true}   // finds close together share one message
 // AMBIENT tier: half the mobs, each hitting twice as hard; instruments bring half the notes, each note hitting twice as hard
 const AMBX=()=>SOUND==='ambient';
+let AMB_K={xp:2,hurt:1.25,hp:0.5,ramp:0.65};   // AMBIENT: half the noise and half the notes, each worth double; xp: XP per pickup, hurt: how much harder the noise hits, hp: noise HP, ramp: how fast the show's clock toughens the noise (ambient songs are long)
 const instMax=id=>{const m=INST[id].max+(id==='kick'&&owns('kick2')?4:0);return AMBX()?Math.ceil(m/2):m};
 const instAdd=id=>AMBX()?Math.max(1,Math.round(INST[id].add/2)):INST[id].add;
 const instStart=id=>AMBX()?Math.max(1,Math.round(INST[id].start/2)):INST[id].start;
@@ -1523,11 +1524,11 @@ const topVenue=()=>[...VENUES].reverse().find(venueOpen)||VENUES[0];   // the da
 // SHOW TWISTS (from show 7): one rule change per show, shown up front; clear the show with it for +60 fans. The daily show seeds both.
 const LEAN_OF={hum:['LOTS OF HUM','low · kick and bass'],hiss:['LOTS OF HISS','high · hats and cymbals'],squeal:['LOTS OF SQUEAL','mid · snare, lead and pad'],clip:['LOTS OF CLIP','full · everything does half']};
 const TWISTS={
-  mix:   {name:b=>BAND_NAME[b]+' END NIGHT',d:b=>`The engineer loves the ${BAND_NAME[b].toLowerCase()} end: ${BAND_NAME[b].toLowerCase()} instruments hit ×1.4, the rest ×0.8`},
-  packed:{name:()=>'PACKED HOUSE',d:()=>'40% more noise · 40% more XP'},
+  mix:   {name:b=>BAND_NAME[b]+' END NIGHT',d:b=>`The engineer loves the ${BAND_NAME[b].toLowerCase()} end: ${BAND_NAME[b].toLowerCase()} instruments hit ×1.25, the rest ×0.7`},
+  packed:{name:()=>'PACKED HOUSE',d:()=>'50% more noise (and the XP it drops)'},
   roadie:{name:()=>'ROADIE STRIKE',d:()=>'No power-ups turn up on their own · requests come twice as often'},
   glass: {name:()=>'NO MONITORS',d:()=>'Max HP −30% · every song break heals you to full'},
-  hot:   {name:()=>'HOT CROWD',d:()=>'Hype builds three times as fast, from 30 s instead of 90: more XP, more noise'}
+  hot:   {name:()=>'HOT CROWD',d:()=>'Hype builds twice as fast, from 45 s instead of 90, and falls twice as fast when you\'re hurt'}
 };
 let LEANS={},TWIST=null,TWIST_BAND='low',SET_READY=false;
 function rollShow(list){
@@ -2091,7 +2092,7 @@ function leadAng(e,spd){
 
 // ================= COMBAT =================
 function hurtEnemy(e,d,band=FIRE_BAND){
-  if(TWIST==='mix'&&band&&band!=='all')d*=band===TWIST_BAND?1.4:0.8;
+  if(TWIST==='mix'&&band&&band!=='all')d*=band===TWIST_BAND?1.25:0.7;
   if(e.dead||(e.type==='dropout'&&dropGone()))return;const duck=e.type==='saw'&&beatAge<0.22;if(duck)d*=0.2;{const k=bandMul(e,band);d*=k;e.dull=k<1||duck;if(k<0.5&&band&&state==='play')tip('eq','EQ','Low noise needs low instruments, high needs high: match them')}if(PU.tape>0)d*=tapeDmg();if(e.type==='boss'&&owns('suppress'))d*=1.4;e.hp-=d;e.flash=0.08;
   if(e.hp<=0){
     e.dead=true;kills++;killQ++;secKills++;if(e.type==='boss'&&SOUND==='fm16')discover('orch');if(kills>=300)discover('crash');FX.pops.push({x:e.x,y:e.y,r:e.r,max:e.r*(e.type==='boss'?6:3),col:e.col,life:e.type==='boss'?0.7:0.35,l0:e.type==='boss'?0.7:0.35});
@@ -2263,16 +2264,17 @@ function dropWave(){
   else{toasts.push({s:'DROP',life:1.1});shake=Math.max(shake,8);FX.aberr=Math.max(FX.aberr,0.7);FX.flashT=1}
 }
 function spawn(type,ang){
+  const t=rampT();   // the noise toughens by the ramp clock
   if(!allowType(type))type=type==='clip'||type==='squeal'?(allowType('hiss')&&Math.random()<0.5?'hiss':'hum'):'hum';   // not met yet: plainer noise instead
   if(TYPE_TIP[type]&&state==='play')tip('t_'+type,...TYPE_TIP[type]);
   if(type!=='boss'&&enemies.length>=enemyCap()+40)return;   // hard cap, drops and hiss packs included
   const def=ET[type],a=ang??Math.random()*6.283,dist=Math.max(VW,VH)*0.62+60;
   // late game: past 6 minutes HP keeps climbing and some noise turns elite; every encore makes the room 30% tougher
   const late=Math.max(0,t-360),enc=Math.pow(1.3,encoreN);
-  const hpMul=(type==='boss'?1+bossCount*0.6:RAMP.hp0+t/RAMP.hp+Math.pow(t/RAMP.hp2,2)+Math.pow(late/RAMP.late,2))*VENUE.hp*enc;
+  const hpMul=(type==='boss'?1+bossCount*0.6:RAMP.hp0+t/RAMP.hp+Math.pow(t/RAMP.hp2,2)+Math.pow(late/RAMP.late,2))*VENUE.hp*enc*(AMBX()&&type!=='boss'?AMB_K.hp??1:1);
   const elite=type!=='boss'&&late>0&&Math.random()<Math.min(0.35,late/1500+encoreN*0.05),eh=elite?2.5:1;
   const dh=1+(type==='boss'?0.3:0.35)*(DIR-1),dd=1+0.25*(DIR-1);   // hype toughens the noise only a little (it mostly packs the room)
-  enemies.push({type,band:type==='boss'?'low':undefined,bandOff:Math.random()*3|0,x:P.x+Math.cos(a)*dist,y:P.y+Math.sin(a)*dist,r:def.r*(elite?1.35:1),hp:def.hp*hpMul*eh*dh,maxHp:def.hp*hpMul*eh*dh,spd:def.spd*(1+Math.min(0.35,t/1200))*(elite?1.2:1)*(VENUE.spd||1),dmg:def.dmg*(elite?1.6:1)*(1+t*DMG_RAMP)*(AMBX()?2:1)*dd*RAMP.dmg,col:def.col,elite,flash:0,kx:0,ky:0,dash:0,dvx:0,dvy:0,tier:bossCount,dead:false});
+  enemies.push({type,band:type==='boss'?'low':undefined,bandOff:Math.random()*3|0,x:P.x+Math.cos(a)*dist,y:P.y+Math.sin(a)*dist,r:def.r*(elite?1.35:1),hp:def.hp*hpMul*eh*dh,maxHp:def.hp*hpMul*eh*dh,spd:def.spd*(1+Math.min(0.35,t/1200))*(elite?1.2:1)*(VENUE.spd||1),dmg:def.dmg*(elite?1.6:1)*(1+t*DMG_RAMP)*(AMBX()?AMB_K.hurt:1)*dd*RAMP.dmg,col:def.col,elite,flash:0,kx:0,ky:0,dash:0,dvx:0,dvy:0,tier:bossCount,dead:false});
 }
 let spawnAcc=0;
 // the base difficulty ramp over a show (seconds per step): enemy HP grows by 1 every RAMP.hp s plus (t/RAMP.hp2)^2, past 6 minutes
@@ -2332,19 +2334,21 @@ function director(dt){
   const taken=DMG30.reduce((a,x)=>a+x,0)/P.maxHp,hp=P.hp/P.maxHp;DMG30.unshift(0);DMG30.pop();
   if(!DIR_ON||revel())return;
   hypeAcc+=DIR;hypeN++;
-  if(hp<0.6)DIR-=0.1;else if(taken>0.25)DIR-=0.04;
-  else if(t>=(TWIST==='hot'?30:90)&&hp>0.85&&taken<0.05)DIR+=0.03*(TWIST==='hot'?3:1);   // the first 90 s are a warm-up for everyone
-  else if(t>=(TWIST==='hot'?30:90)&&hp>0.7&&taken<0.1)DIR+=0.01*(TWIST==='hot'?3:1);
+  const hot=TWIST==='hot'?2:1;
+  if(hp<0.6)DIR-=0.1*hot;else if(taken>0.25)DIR-=0.04*hot;
+  else if(t>=(TWIST==='hot'?45:90)&&hp>0.85&&taken<0.05)DIR+=0.03*hot;   // the first 90 s are a warm-up for everyone
+  else if(t>=(TWIST==='hot'?45:90)&&hp>0.7&&taken<0.1)DIR+=0.01*hot;
   DIR=clamp(DIR,1,RAMP.dirMax);
 }
 let DMG_RAMP=1/900;   // noise hits harder as the show goes on: x1.5 after 8 minutes
 // knockback: after 5 minutes a noise shoved again within half a second only takes a quarter of the push, and elites resist,
 // so a dense kick pattern slows the room down instead of holding it off forever
 function shove(e,ux,uy,amt){if(e.type==='boss')return;if(t>300&&t<e.shoveT)amt*=0.25;e.shoveT=t+0.5;if(e.elite)amt*=0.4;e.kx+=ux*amt;e.ky+=uy*amt}
-const enemyCap=()=>(RAMP.cap+Math.min(160,Math.max(0,t-360)*0.25))*(AMBX()?0.5:1)*(1+0.5*(DIR-1));   // the room fills further after 6 minutes
+const rampT=()=>t*(AMBX()?AMB_K.ramp??1:1);
+const enemyCap=()=>(RAMP.cap+Math.min(160,Math.max(0,rampT()-360)*0.25))*(AMBX()?0.5:1)*(1+0.5*(DIR-1));   // the room fills further after 6 minutes
 function spawning(dt){
   director(dt);if(revel())return;   // between songs the room stays clear
-  spawnAcc+=dt*(DARE==='swarm'?2:1)*(TWIST==='packed'?1.4:1)*(RAMP.spawn0+t/RAMP.spawn)*ty().spawn*VENUE.spawn*(AMBX()?0.5:1)*DIR*(guide.on&&guide.hits<6&&t<45?0.3:1);   // the first show ever starts gently until the beat clicks
+  spawnAcc+=dt*(DARE==='swarm'?2:1)*(TWIST==='packed'?1.5:1)*(RAMP.spawn0+rampT()/RAMP.spawn)*ty().spawn*VENUE.spawn*(AMBX()?0.5:1)*DIR*(guide.on&&guide.hits<6&&t<45?0.3:1);   // the first show ever starts gently until the beat clicks
   while(spawnAcc>=1){
     spawnAcc-=1;if(enemies.length>enemyCap())continue;
     {const gm_=GENRE_MOB[SOUND];if(gm_&&t>50&&Math.random()<0.12){spawn(gm_);continue}}   // this sound's own noise, about one spawn in eight
@@ -2468,7 +2472,7 @@ function update(dt){
   }
   auras=auras.filter(a=>a.next<a.until);
 
-  for(const b of ebullets){const tf=tapeSlow();b.x+=b.vx*dt*tf;b.y+=b.vy*dt*tf;b.life-=dt;if(Math.hypot(b.x-P.x,b.y-P.y)<b.r+P.r-3&&P.inv<=0){damagePlayer(AMBX()?20:10);b.life=0}}
+  for(const b of ebullets){const tf=tapeSlow();b.x+=b.vx*dt*tf;b.y+=b.vy*dt*tf;b.life-=dt;if(Math.hypot(b.x-P.x,b.y-P.y)<b.r+P.r-3&&P.inv<=0){damagePlayer(AMBX()?10*AMB_K.hurt:10);b.life=0}}
   ebullets=ebullets.filter(b=>b.life>0);
 
   for(const q of gems){
@@ -2505,7 +2509,7 @@ function knockout(cause){   // the end of the show, unless LEGENDS crowd-surf yo
   P.hp=0;deathCause=cause;endRun(false);return true}
 let XP_CURVE=1.35;   // how much XP each level costs, relative to the base curve (the first level stays at 3 XP)
 function gainXp(v){
-  P.xp+=v*(G.poly?1.25:1)*(1+0.5*(DIR-1))*(DARE==='swarm'?1.5:1)*(TWIST==='packed'?1.4:1);   // hype pays: up to +60% XP
+  P.xp+=v*(G.poly?1.25:1)*(1+0.5*(DIR-1))*(DARE==='swarm'?1.5:1)*(AMBX()?AMB_K.xp:1);   // hype pays: up to +60% XP
   if(P.lvl>=10)discover('reroll');if(P.lvl>=25)discover('setlist');
   while(P.xp>=P.next&&pendingLevels<3){P.xp-=P.next;P.lvl++;P.next=Math.floor((5+P.lvl*3+Math.pow(P.lvl,1.5))*XP_CURVE);pendingLevels++}
 }
