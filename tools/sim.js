@@ -15,7 +15,8 @@
     // telemetry: judgements, clipping bars, damage taken; a late or early headphone offset shifts every press (cfg.bias, s)
     const realJudge=judge;judge=function(r,...a){if(!a[1])out.judge[r]=(out.judge[r]||0)+1;return realJudge(r,...a)};
     const realHit=hit;if(cfg.bias)hit=function(h){return realHit(h===undefined?h:h+cfg.bias)};
-    const realDmg=damagePlayer;damagePlayer=function(d){out.hits++;if(REQ&&REQ.inR)out.reqHits++;return realDmg(d)};
+    out.hitBy={};const realDmg=damagePlayer;damagePlayer=function(d){out.hits++;if(REQ&&REQ.inR)out.reqHits++;   // who landed it: the nearest noise in contact, else a bullet
+      let by='bullet';for(const e of enemies)if(!e.dead&&Math.hypot(e.x-P.x,e.y-P.y)<e.r+P.r+2){by=e.type;break}out.hitBy[by]=(out.hitBy[by]||0)+1;return realDmg(d)};
     // telemetry: level-ups in a row that offered no new instrument (while one was left), and which power-ups were picked up
     out.dry=0;out.pu={};let dry=0;
     const realOpen=openLevelUp;openLevelUp=function(){realOpen();const left=Object.keys(INST).some(id=>!trackOf(id)&&(!LOCKED_INST[id]||owns(id))&&instHere(id));

@@ -340,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=143,REV_DATE='2026-10-24';
+const REV=144,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -1457,7 +1457,8 @@ POOLS.rave={
   drop:['i bVI bVII i','i bVII bVI bVII','i i bVI bVII','i bVI bIII bVII'],
   breakdown:['bVI bVII i i','iv bVI bVII i','bVImaj7 bVII i i']         // the piano breakdowns
 };
-FORMS.rave=[['INTRO',16,'intro','intro'],['BUILD',8,'pre','pre'],['DROP',16,'chorus','drop','sing'],['BREAK',8,'verse','verse'],['BUILD 2',8,'pre','pre'],['DROP 2',16,'chorus','drop','boss'],
+// the band sings (its melody notes fight for you) only in the two piano breakdowns: singing every drop too made rave twice as easy (sims, rev 144)
+FORMS.rave=[['INTRO',16,'intro','intro'],['BUILD',8,'pre','pre'],['DROP',16,'chorus','drop'],['BREAK',8,'verse','verse'],['BUILD 2',8,'pre','pre'],['DROP 2',16,'chorus','drop','boss'],
   ['BREAKDOWN',16,'breakdown','breakdown','sing'],['BUILD 3',8,'pre','pre'],['DROP 3',16,'chorus','drop'],['BREAK 2',16,'verse','verse'],['BUILD 4',8,'pre','pre'],['DROP 4',16,'chorus','drop','boss'],
   ['BREAKDOWN 2',8,'breakdown','breakdown','sing'],['BUILD 5',8,'pre','pre'],['FINAL DROP',32,'chorus','drop']];   // 200 bars, about 6 minutes
 const RAVE_TITLES=['WAREHOUSE 93','ACID WASH','STROBE THEORY','LASER FIELD','SUNRISE CAR PARK','BASS BIN','FOG MACHINE','PIANO STAB'];
@@ -1492,8 +1493,13 @@ function swingOff(s,pos,bdur){const a=s&&s.swing?0.667*s.swing:0;if(!a||s.L!==16
 function raveSet(v){
   const song=bookPick(1,x=>x.mode==='minor')[0],bpm=v&&v.fast?v.bpm[0]+Math.floor(Math.random()*(v.bpm[1]-v.bpm[0]+1)):132+Math.floor(Math.random()*9),   // the fast stages keep their own tempo
    key=Math.random()*12|0,mode='minor',title=song.name;   // one songbook song, as a long rave track
-  const list=FORMS.rave.map(([name,bars,type,role,flag],i,arr)=>{const isLast=i===arr.length-1,bs=bookSec(song,role),sec={name,bars,ts:'4/4',L:16,key,mode,prog:bs.prog,bpm,type:isLast?'finale':type,hr:bs.hr,song:0,songTitle:title,
-    boss:flag==='boss'||isLast,sing:flag==='sing',mel:bs.mel,melVol:MEL_VOL[isLast?'finale':type],melDouble:isLast,amb:false};if(i===0)sec.title=`RAVE · ${title}`;return sec});
+  // the track grows with the venue: break / build / drop blocks go in before the last breakdown until it lasts about as long as
+  // the venue's shows (about 3 minutes a song, 400 to 600 s). A 6-minute track everywhere made rave the easy way through every stage (sims: 48% won at the club, 10% on 8-bit)
+  let form=FORMS.rave.slice();{const target=clamp(((v&&v.songs)||2)*180,400,600),len=f=>f.reduce((a,x)=>a+x[1],0)*240/bpm;let k=0;
+    while(len(form)<target*0.95&&k<6){k++;const at=form.findIndex(x=>x[0]==='BREAKDOWN 2');form.splice(at,0,['BREAK X'+k,16,'verse','verse'],['BUILD X'+k,8,'pre','pre'],['DROP X'+k,16,'chorus','drop',k%2?'boss':''],['BREAKDOWN X'+k,8,'breakdown','breakdown'])}
+    let nb=0,nd=0,nk=0,nr=0;form=form.map(([name,...r])=>[/^BREAK X/.test(name)?`BREAK ${3+(++nb)}`:/^BUILD X/.test(name)?`BUILD ${5+(++nd)}`:/^DROP X/.test(name)?`DROP ${4+(++nk)}`:/^BREAKDOWN X/.test(name)?`BREAKDOWN ${2+(++nr)}`:name,...r])}
+  const list=form.map(([name,bars,type,role,flag],i,arr)=>{const isLast=i===arr.length-1,bs=bookSec(song,role),sec={name,bars,ts:'4/4',L:16,key,mode,prog:bs.prog,bpm,type:isLast?'finale':type,hr:bs.hr,song:0,songTitle:title,
+    boss:flag==='boss'||isLast,sing:flag==='sing',scr:i>0&&arr[i-1][2]==='breakdown',mel:bs.mel,melVol:MEL_VOL[isLast?'finale':type],melDouble:isLast,amb:false};if(i===0)sec.title=`RAVE · ${title}`;return sec});
   return {list,lastStart:0};
 }
 // TRANCE: every venue plays trance tracks: 4/4 at 136-140 BPM, minor, a long breakdown between two drops.
@@ -2023,7 +2029,7 @@ function scheduleAudio(ev){
 }
 function genreBar(){   // each bar: ALIAS folds across you every other bar, DRONE sends a slow pulse
   for(const e of enemies){if(e.dead)continue;
-    if(e.type==='alias'&&((e.bars=(e.bars||0)+1)%2===0)){FX.pops.push({x:e.x,y:e.y,r:e.r,max:e.r*3,col:colOf(e),life:0.3,l0:0.3});e.x=2*P.x-e.x;e.y=2*P.y-e.y;FX.pops.push({x:e.x,y:e.y,r:e.r*3,max:e.r,col:colOf(e),life:0.3,l0:0.3})}
+    if(e.type==='alias'&&((e.bars=(e.bars||0)+1)%2===0)){FX.pops.push({x:e.x,y:e.y,r:e.r,max:e.r*3,col:colOf(e),life:0.3,l0:0.3});{const dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy)||1,k=Math.max(d,220)/d;e.x=P.x+dx*k;e.y=P.y+dy*k}e.safeT=t+0.5;e.warn=false;FX.pops.push({x:e.x,y:e.y,r:e.r*3,max:e.r,col:colOf(e),life:0.3,l0:0.3})}   // it lands harmless for half a second (sims: the jump landed a quarter of all hits taken in 16-bit)
     else if(e.type==='drone'){const a=Math.atan2(P.y-e.y,P.x-e.x);ebullets.push({x:e.x,y:e.y,vx:Math.cos(a)*120,vy:Math.sin(a)*120,r:7,life:4})}}
 }
 function onStepHeard(ev){
@@ -2031,6 +2037,7 @@ function onStepHeard(ev){
   if(ev.end){if(state==='play'||state==='levelup'||state==='edit')endRun(true);return}
   const s=SETLIST[ev.si],ib=ev.ib;HE=ev;
   if(ib===0&&state==='play'&&!revel())genreBar();
+  if(ib===ev.L-4&&state==='play')for(const e of enemies)if(e.type==='alias'&&!e.dead)e.warn=((e.bars||0)+1)%2===0;   // the beat before an ALIAS jumps: a ring shows where it will land
   if(ib%4===0){if(DROP.on&&--DROP.left<=0)DROP.on=false;if(DROP.armed&&(ib===0||perk('anybeat'))&&state==='play'&&!revel())dropLand()}   // the drop lasts 4 beats from where it lands
   if(ib%4===0){beatAge=0;beatPulse=1;
     if(state==='play'&&!autoBeat()&&!revel()&&tracks.length){const bd=60/secBpm(ev.si),since=(ev.t-lastHitT)/bd;
@@ -2097,7 +2104,7 @@ function sectionFinds(s){
 function sectionStart(si){
   const s=SETLIST[si];HS=si;heardL=s.L;sectionsPlayed++;sectionFinds(s);
   if(s.title)toasts.push({s:s.title,sub:LEANS[s.song]?LEAN_OF[LEANS[s.song]][0]:'',life:2.2});
-  if(s.title&&sectionsPlayed>1&&(state==='play'||state==='levelup'||state==='edit')&&scrambleLoop())toasts.push({s:'SCRAMBLED',sub:'Fix your loop · '+K('TAB','SEQ','Y'),col:'#b4ff3c',life:2.6});   // every new song shakes your loop up
+  if((s.title||s.scr)&&sectionsPlayed>1&&(state==='play'||state==='levelup'||state==='edit')&&scrambleLoop())toasts.push({s:'SCRAMBLED',sub:'Fix your loop · '+K('TAB','SEQ','Y'),col:'#b4ff3c',life:2.6});   // every new song shakes your loop up
   recalcGrooves(state!=='title');
   // THE HOWL stays for its own section and the next one, then fades out (no reward) so bosses never pile up
   for(const e of enemies)if(e.type==='boss'&&!e.dead&&++e.secs>=2){e.dead=true;burst(e.x,e.y,e.col,30,200);FX.pops.push({x:e.x,y:e.y,r:e.r,max:e.r*5,col:e.col,life:0.7,l0:0.7});toasts.push({s:'THE HOWL FADES',col:'#ff2a55',life:1.8})}
@@ -2477,7 +2484,7 @@ function update(dt){
     e.x+=(vx+e.kx)*dt;e.y+=(vy+e.ky)*dt;
     const decay=Math.pow(0.02,dt);e.kx*=decay;e.ky*=decay;e.flash-=dt;
     if(d>Math.max(VW,VH)*1.3&&e.type!=='boss'){const a=Math.random()*6.283,r=Math.max(VW,VH)*0.6;e.x=P.x+Math.cos(a)*r;e.y=P.y+Math.sin(a)*r}
-    if(d<e.r+P.r&&P.inv<=0&&P.perf<=0&&!(e.type==='dropout'&&dropGone()))damagePlayer(e.dmg);
+    if(d<e.r+P.r&&P.inv<=0&&P.perf<=0&&!(e.type==='dropout'&&dropGone())&&!(e.safeT>t))damagePlayer(e.dmg);
   }
 
   for(const b of bullets){
@@ -3452,6 +3459,7 @@ function draw(){
     // the body: what each noise is, drawn as a sign of it (see drawNoise); it stretches toward you as it lunges on the beat
     g.fillStyle=e.flash>0?(e.dull?'#7d7a92':'#fff'):colOf(e);   // an out-of-band hit flashes dull grey; THE HOWL wears its band's colour
     drawNoise(e,r,now);
+    if(e.type==='alias'&&e.warn){g.save();g.strokeStyle=colOf(e);g.globalAlpha=0.5+0.4*Math.sin(now*20);g.setLineDash([4,4]);g.lineWidth=2;g.beginPath();g.arc(P.x+(P.x-e.x)*Math.max(1,220/(Math.hypot(P.x-e.x,P.y-e.y)||1)),P.y+(P.y-e.y)*Math.max(1,220/(Math.hypot(P.x-e.x,P.y-e.y)||1)),e.r*1.4,0,6.283);g.stroke();g.restore()}   // where it is about to land
     {const eb=enemyBand(e);if(eb){g.save();g.strokeStyle=colOf(e);g.globalAlpha=0.8;g.lineWidth=1.6;g.setLineDash(BAND_DASH[eb]);const rr=r*(e.type==='hiss'?1.35:e.type==='squeal'?1.35:1.12)+4;   // the band, told by the outline's pattern as well as colour
       g.beginPath();g.arc(e.x,e.y,rr,0,6.283);g.stroke();if(eb==='all'){g.beginPath();g.arc(e.x,e.y,rr+4,0,6.283);g.stroke()}g.restore()}}
     if(e.flash<=0){g.fillStyle='rgba(255,255,255,.22)';g.beginPath();g.arc(e.x-r*0.3,e.y-r*0.3,r*0.38,0,6.283);g.fill()}   // specular dot
