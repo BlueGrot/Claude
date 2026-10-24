@@ -56,6 +56,11 @@ button.ghost:hover,button.ghost:focus-visible{background:var(--line);border-colo
 .card .l{font-size:12px;color:var(--dim)}
 .card .d{font-size:13px;line-height:1.45}
 .stats{font-size:16px;line-height:1.9}
+.preSongs{display:flex;flex-direction:column;gap:6px;width:min(560px,calc(100vw - 32px))}
+.preSong{display:grid;grid-template-columns:1fr auto;gap:2px 12px;padding:8px 12px;border:1px solid var(--line);border-radius:8px;text-align:left;background:rgba(18,6,38,.6)}
+.preSong b{letter-spacing:.06em}.preSong .m{color:var(--dim);font-size:12px;text-align:right}.preSong .ln{grid-column:1/-1;font-size:12px;color:var(--dim)}
+#preTwist{width:min(560px,calc(100vw - 32px));padding:10px 14px;border:2px solid var(--gold);border-radius:10px;text-align:left}#preTwist:empty{display:none}
+#preTwist b{color:var(--gold);letter-spacing:.08em}#preTwist .small{padding:0}
 .stats b{color:var(--accent)}
 /* sequencer editor */
 #editMeta{color:var(--gold);font-size:12px;line-height:1.6;max-width:700px}
@@ -223,6 +228,14 @@ body.chip #title .small,body.chip #title .tag{background:#000}
   <p class="small rev"></p>
 </div>
 
+<div id="pre" class="ov hidden">
+  <h2 style="color:var(--gold)" id="preTitle">TONIGHT</h2>
+  <div id="preSongs" class="preSongs"></div>
+  <div id="preTwist"></div>
+  <div class="row"><button id="preGo">PLAY ⏎</button><button id="preBack" class="ghost">BACK</button></div>
+  <p class="small" id="preKeys"></p>
+</div>
+
 <div id="studio" class="ov hidden">
   <h2 style="color:var(--gold)">STUDIO</h2>
   <p class="tag" id="fansLine"></p>
@@ -327,7 +340,7 @@ function saveSet(){try{localStorage.setItem('fl_set',JSON.stringify(SET))}catch(
 
 // ================= META (persists between shows) =================
 // build revision: bump on every change and add a line to CHANGELOG.md, so playtest feedback can be tied to a build
-const REV=132,REV_DATE='2026-10-24';
+const REV=133,REV_DATE='2026-10-24';
 document.querySelectorAll('.rev').forEach(el=>el.textContent=`rev ${REV} · ${REV_DATE}`);
 const SAVE_V=2;   // 1: before rev 102 (no version field); 2: rev 102
 const META_DEF={v:SAVE_V,fans:0,shows:0,own:{},lv:{},venues:{},found:{},seen:{},venue:'basement',band:'four'};
@@ -406,7 +419,7 @@ const SHOP=[
 const RANKS=[[0,'GARAGE BAND','',''],[200,'OPENING ACT','daily','The daily show'],[600,'LOCAL HEROES','dares','Dares at song breaks'],[1500,'CLUB REGULARS','lights','Stage lights'],
   [3500,'TOURING BAND','dare3','Three dares to choose from'],[7000,'HEADLINERS','anybeat','The drop lands on the next beat, not the next bar'],[14000,'LEGENDS','surf','Crowd surf: once a show, a knockout puts you back up at 30% HP']];
 // SYSTEMS ARRIVE OVER THE FIRST SHOWS: shows played before each one turns up (the demo has them all)
-const FEAT_AT={dash:1,req:2,drop:4},FEAT_NAME={dash:['DASH',K('Shift or middle click','Double tap the move side')+' · on the beat it goes further'],req:['REQUESTS','Stand in the ring for a power-up'],drop:['THE DROP',K('At full groove press E','At full groove tap DROP')+' · once a section']};
+const FEAT_AT={dash:1,req:2,drop:4,twist:6},FEAT_NAME={twist:['SHOW TWISTS','Every show has one · clear the show for +60 fans'],dash:['DASH',K('Shift or middle click','Double tap the move side')+' · on the beat it goes further'],req:['REQUESTS','Stand in the ring for a power-up'],drop:['THE DROP',K('At full groove press E','At full groove tap DROP')+' · once a section']};
 const feat=k=>(!!DEMO&&!DEMO.real)||META.shows>=FEAT_AT[k];   // DEMO.real: a simulated playtester (tools/sim.js) plays by the real rules
 const rankOf=f=>{let i=0;while(i+1<RANKS.length&&f>=RANKS[i+1][0])i++;return i};
 const perk=id=>{const i=RANKS.findIndex(x=>x[2]===id);return i>0&&rankOf(META.earned||0)>=i};
@@ -805,7 +818,7 @@ const TRANCE={
       p.pan.value=d*width*(i%2?1:-1);o.connect(p);p.connect(dest)}},
   mixer(n){const g=this.ctx.createGain();g.gain.value=1/Math.sqrt(n);return g},
   send(g,node,amt){if(!node||!amt)return;const s=this.ctx.createGain();s.gain.value=amt;g.connect(s);s.connect(node)},
-  s16(){return state==='title'?60/THEME.bpm/4:sec()?60/(sec().bpm+bpmAdd)/4:0.11},
+  s16(){return TITLEISH()?60/THEME.bpm/4:sec()?60/(sec().bpm+bpmAdd)/4:0.11},
   kick(t,v=1,hz=50){if(!this.ctx)return;const o=this.osc('sine',Math.max(160,hz*5),t,0.6);o.frequency.exponentialRampToValueAtTime(hz*1.6,t+0.025);o.frequency.exponentialRampToValueAtTime(hz,t+0.12);
     const sh=this.shaper();o.connect(sh);this.env(sh,t,0.21*v,0.5,0.002,0.04);
     const n=this.nz(t,0.015),f=this.filt('highpass',3000);n.connect(f);this.env(f,t,0.05*v,0.01,0.001)},   // long, tuned tail; a short click on top
@@ -1504,7 +1517,25 @@ function seeded(str,fn){let h=1779033703;for(const c of str)h=Math.imul(h^c.char
   Math.random=()=>{a=a+0x6D2B79F5|0;let t_=Math.imul(a^a>>>15,1|a);t_=t_+Math.imul(t_^t_>>>7,61|t_)^t_;return((t_^t_>>>14)>>>0)/4294967296};try{return fn()}finally{Math.random=r0}}
 const dailyBest=()=>{const d=META.daily;return d&&d.d===today()?d.best||{}:{}};
 const topVenue=()=>[...VENUES].reverse().find(venueOpen)||VENUES[0];   // the daily show plays at the furthest venue you've opened
-function newSet(){DAILY=META.venue==='daily'&&perk('daily')&&!DEMO;VENUE=DAILY?topVenue():VENUES.find(v=>v.id===META.venue&&venueOpen(v))||VENUES[0];const g_=DEMO?demoSet():DAILY?seeded(today()+VENUE.id+SOUND,()=>{const sr=SONG_RECENT;SONG_RECENT=[];try{return generateSet(VENUE)}finally{SONG_RECENT=sr}}):generateSet(VENUE);SETLIST=g_.list;LAST_SONG=g_.lastStart;TOTAL_BARS=SETLIST.reduce((a,x)=>a+x.bars,0)}
+// SONG LEANS: every song after the first favours one kind of noise, and the setlist screen says which, so a build can be planned.
+// SHOW TWISTS (from show 7): one rule change per show, shown up front; clear the show with it for +60 fans. The daily show seeds both.
+const LEAN_OF={hum:['LOTS OF HUM','low · kick and bass'],hiss:['LOTS OF HISS','high · hats and cymbals'],squeal:['LOTS OF SQUEAL','mid · snare, lead and pad'],clip:['LOTS OF CLIP','full · everything does half']};
+const TWISTS={
+  mix:   {name:b=>BAND_NAME[b]+' END NIGHT',d:b=>`The engineer loves the ${BAND_NAME[b].toLowerCase()} end: ${BAND_NAME[b].toLowerCase()} instruments hit ×1.4, the rest ×0.8`},
+  packed:{name:()=>'PACKED HOUSE',d:()=>'40% more noise · 40% more XP'},
+  roadie:{name:()=>'ROADIE STRIKE',d:()=>'No power-ups turn up on their own · requests come twice as often'},
+  glass: {name:()=>'NO MONITORS',d:()=>'Max HP −30% · every song break heals you to full'},
+  hot:   {name:()=>'HOT CROWD',d:()=>'Hype builds three times as fast, from 30 s instead of 90: more XP, more noise'}
+};
+let LEANS={},TWIST=null,TWIST_BAND='low',SET_READY=false;
+function rollShow(list){
+  LEANS={};TWIST=null;if(DEMO&&!DEMO.real)return;
+  const st=META.shows||0,pool=['hum','hiss',...(st>=1?['squeal']:[]),...(st>=2?['clip']:[])];let prev=null;
+  for(const n of new Set(list.map(x=>x.song)))if(n>0){const k=pick(pool.filter(x=>x!==prev));LEANS[n]=prev=k}
+  if(feat('twist'))TWIST=pick(Object.keys(TWISTS));TWIST_BAND=pick(['low','mid','high']);
+}
+const twistName=()=>TWIST?TWISTS[TWIST].name(TWIST_BAND):'',twistDesc=()=>TWIST?TWISTS[TWIST].d(TWIST_BAND):'';
+function newSet(){DAILY=META.venue==='daily'&&perk('daily')&&!DEMO;VENUE=DAILY?topVenue():VENUES.find(v=>v.id===META.venue&&venueOpen(v))||VENUES[0];const gen=()=>{const g=generateSet(VENUE);rollShow(g.list);return g};const g_=DEMO?demoSet():DAILY?seeded(today()+VENUE.id+SOUND,()=>{const sr=SONG_RECENT;SONG_RECENT=[];try{return gen()}finally{SONG_RECENT=sr}}):gen();if(DEMO){LEANS={};TWIST=null}SETLIST=g_.list;LAST_SONG=g_.lastStart;TOTAL_BARS=SETLIST.reduce((a,x)=>a+x.bars,0)}
 newSet();
 const TYPE={
   intro:    {spawn:0.6,dmg:1,  spd:1,   d:''},
@@ -1631,6 +1662,7 @@ const GENRE_MOB={fm16:'alias',rave:'acid',ambient:'drone',trance:'saw',vapor:'dr
 const dropGone=()=>!!HE&&!revel()&&HE.ib>=heardL-4;   // the DROPOUT's missing beat
 
 // ================= STATE =================
+const TITLEISH=()=>state==='title'||state==='pre';   // the setlist screen draws and sounds like the title
 let state='title',musicOn=false,endless=false,encoreN=0;
 // scheduler position (runs ~120 ms ahead of what is heard)
 const beatMeta=new Map(),hitBeats=new Set();   // which beat of the bar each beat time is, and which beats the player hit (for the backbeat rule)
@@ -1717,14 +1749,15 @@ function reset(){
   groove=0;hitsThisBar=0;streak=0;bestStreak=0;killQ=0;
   QN=0;metaEntry=-1;SI=0;SB=0;SIB=0;schedDone=false;keyShift=0;bpmAdd=0;events=[];hitQ=[];melQ=[];beatTimes=[];padVoice=null;leadN=0;
   HS=0;HE=null;heardL=16;sectionsPlayed=0;entry=0;startedEntry=-1;lastJudged=-1;
-  FX.trail=[];REQ=null;reqNext=35;reqDone=0;dashCd=0;DROP.armed=DROP.on=false;DROP.sec=-1;DARE=null;dareOffer=null;daresKept=0;dareUI(false);mouseGo.on=mouseGo.held=mouseGo.used=false;mouseGo.arr=-9;fbTold=false;deathCause='noise';finds=[];puGot=0;gemsGot=0;backTold=false;beatMeta.clear();hitBeats.clear();
+  FX.trail=[];REQ=null;reqNext=TWIST==='roadie'?18:35;reqDone=0;dashCd=0;DROP.armed=DROP.on=false;DROP.sec=-1;DARE=null;dareOffer=null;daresKept=0;dareUI(false);mouseGo.on=mouseGo.held=mouseGo.used=false;mouseGo.arr=-9;fbTold=false;deathCause='noise';finds=[];puGot=0;gemsGot=0;backTold=false;beatMeta.clear();hitBeats.clear();
   recompute();recalcGrooves(false);
 }
 function recompute(){
   const before=P.maxHp;
   P.dmg=1+0.15*plv('gain');P.maxHp=100+5*Math.min(4,mlv('rig'))+10*plv('headroom');P.magnet=95*(1+0.3*plv('band'));
+  if(TWIST==='glass')P.maxHp=Math.round(P.maxHp*0.7);
   P.speed=170*(1+0.08*plv('slew'));P.armor=1.5*plv('limiter');P.regen=0.6*plv('phantom');P.area=1+0.2*plv('width');
-  if(P.maxHp>before)P.hp+=P.maxHp-before;
+  if(P.maxHp>before)P.hp+=P.maxHp-before;P.hp=Math.min(P.hp,P.maxHp);
 }
 
 // ================= CLOCK =================
@@ -1770,7 +1803,7 @@ function pump(){
   while(events.length&&events[0].t<=heard)onStepHeard(events.shift());
   while(hitQ.length&&hitQ[0].t<=heard)onHitHeard(hitQ.shift());
   while(melQ.length&&melQ[0].t<=heard){
-    const n=melQ.shift();if(!P||state==='title')continue;
+    const n=melQ.shift();if(!P||TITLEISH())continue;
     FX.notes.push({x:P.x+rnd(-20,20),y:P.y-24-(n.m-60)*1.1,life:1.3,l0:1.3});
     if(state==='play'){   // the song fights for you: every melody note is a homing note
       const tg=nearest(P.x,P.y,620),a=tg?angTo(tg):Math.random()*6.283;
@@ -2014,7 +2047,7 @@ function sectionFinds(s){
 }
 function sectionStart(si){
   const s=SETLIST[si];HS=si;heardL=s.L;sectionsPlayed++;sectionFinds(s);
-  if(s.title)toasts.push({s:s.title,life:2.2});
+  if(s.title)toasts.push({s:s.title,sub:LEANS[s.song]?LEAN_OF[LEANS[s.song]][0]:'',life:2.2});
   if(s.title&&sectionsPlayed>1&&(state==='play'||state==='levelup'||state==='edit')&&scrambleLoop())toasts.push({s:'SCRAMBLED',sub:'Fix your loop · '+K('TAB','SEQ','Y'),col:'#b4ff3c',life:2.6});   // every new song shakes your loop up
   recalcGrooves(state!=='title');
   // THE HOWL stays for its own section and the next one, then fades out (no reward) so bosses never pile up
@@ -2056,6 +2089,7 @@ function leadAng(e,spd){
 
 // ================= COMBAT =================
 function hurtEnemy(e,d,band=FIRE_BAND){
+  if(TWIST==='mix'&&band&&band!=='all')d*=band===TWIST_BAND?1.4:0.8;
   if(e.dead||(e.type==='dropout'&&dropGone()))return;const duck=e.type==='saw'&&beatAge<0.22;if(duck)d*=0.2;{const k=bandMul(e,band);d*=k;e.dull=k<1||duck;if(k<0.5&&band&&state==='play')tip('eq','EQ','Low noise needs low instruments, high needs high: match them')}if(PU.tape>0)d*=tapeDmg();if(e.type==='boss'&&owns('suppress'))d*=1.4;e.hp-=d;e.flash=0.08;
   if(e.hp<=0){
     e.dead=true;kills++;killQ++;secKills++;if(e.type==='boss'&&SOUND==='fm16')discover('orch');if(kills>=300)discover('crash');FX.pops.push({x:e.x,y:e.y,r:e.r,max:e.r*(e.type==='boss'?6:3),col:e.col,life:e.type==='boss'?0.7:0.35,l0:e.type==='boss'?0.7:0.35});
@@ -2275,16 +2309,17 @@ function countIn(si,T){
     if(k==='hat')ENG.note('hat',{...e,t,vel:v,len:0.03});else if(k==='rim')ENG.note('rim',{...e,t});else if(k==='ks')ENG.note(i%2?'snare':'kick',{...e,t,vel:v,hz:kickHz(si,chordAt(si,0,0))});else ENG.note('snare',{...e,t,vel:v})}
 }
 function dareUI(on){const el=$('dares');if(!el)return;if(!on||!dareOffer){el.classList.add('hidden');dareOffer=null;return}
-  el.innerHTML='<div class="small">THE CROWD DARES YOU · next song</div>'+dareOffer.map((k,i)=>`<button class="ghost" data-k="${k}"><b>${i+1} · ${DARES[k][0]}</b><small>${DARES[k][1]}<br><span style="color:var(--gold)">${DARES[k][2]}</span></small></button>`).join('');
+  const pk=['LB','RB','LT'];   // a controller takes dares with the shoulder buttons (A is the beat), so the cards name them
+  el.innerHTML=`<div class="small">THE CROWD DARES YOU · next song${PAD.used?' · '+pk.slice(0,dareOffer.length).join(' / '):''}</div>`+dareOffer.map((k,i)=>`<button class="ghost" data-k="${k}"><b>${K(i+1,i+1,pk[i])} · ${DARES[k][0]}</b><small>${DARES[k][1]}<br><span style="color:var(--gold)">${DARES[k][2]}</span></small></button>`).join('');
   el.querySelectorAll('button').forEach(b=>b.onclick=()=>takeDare(b.dataset.k));el.style.visibility='';el.classList.remove('hidden')}
 function takeDare(k){if(!dareOffer||!dareOffer.includes(k))return;DARE=k;dareUI(false);AU.chime();
   if(k==='fast'){bpmAdd+=10;dropPU(randomPU(),P.x,P.y,true)}if(k==='nodash')pendingLevels++;
   toasts.push({s:'DARE · '+DARES[k][0],sub:DARES[k][1],col:'#ff4dbe',life:1.8})}
 function songClear(){
-  if(!P||state==='title')return;
+  if(!P||TITLEISH())return;
   for(const e of enemies)if(!e.dead&&e.type!=='boss'){const d=Math.hypot(e.x-P.x,e.y-P.y)||1;shove(e,(e.x-P.x)/d,(e.y-P.y)/d,e.elite?200:420);if(!e.elite&&(e.type==='hum'||e.type==='hiss'))hurtEnemy(e,e.hp+1)}   // the weak are blown away, the tough are blown back
   FX.pops.push({x:P.x,y:P.y,r:P.r,max:Math.max(VW,VH)*0.8,col:'#ffffff',life:0.9,l0:0.9});FX.bloom=1;shake=Math.max(shake,6);
-  const heal=Math.min(P.maxHp-P.hp,Math.round(P.maxHp*0.3));P.hp+=heal;   // catching your breath between songs
+  const heal=Math.min(P.maxHp-P.hp,TWIST==='glass'?P.maxHp:Math.round(P.maxHp*0.3));P.hp+=heal;   // catching your breath between songs
   toasts.push({s:'SONG CLEAR',sub:heal>0?`+${heal} HP`:'',col:'#ffd166',life:SONG_GAP-0.6});
   if(DARE){daresKept++;toasts.push({s:'DARE KEPT · '+DARES[DARE][0],col:'#ff4dbe',life:SONG_GAP-0.6});if(DARE==='fast')bpmAdd-=10;DARE=null}
   if((!DEMO||DEMO.real)&&!endless&&perk('dares')){const ks=Object.keys(DARES).sort(()=>Math.random()-0.5);dareOffer=ks.slice(0,perk('dare3')?3:2);dareT=t;dareUI(true)}
@@ -2296,8 +2331,8 @@ function director(dt){
   if(!DIR_ON||revel())return;
   hypeAcc+=DIR;hypeN++;
   if(hp<0.6)DIR-=0.1;else if(taken>0.25)DIR-=0.04;
-  else if(t>=90&&hp>0.85&&taken<0.05)DIR+=0.03;   // the first 90 s are a warm-up for everyone
-  else if(t>=90&&hp>0.7&&taken<0.1)DIR+=0.01;
+  else if(t>=(TWIST==='hot'?30:90)&&hp>0.85&&taken<0.05)DIR+=0.03*(TWIST==='hot'?3:1);   // the first 90 s are a warm-up for everyone
+  else if(t>=(TWIST==='hot'?30:90)&&hp>0.7&&taken<0.1)DIR+=0.01*(TWIST==='hot'?3:1);
   DIR=clamp(DIR,1,RAMP.dirMax);
 }
 let DMG_RAMP=1/900;   // noise hits harder as the show goes on: x1.5 after 8 minutes
@@ -2307,17 +2342,18 @@ function shove(e,ux,uy,amt){if(e.type==='boss')return;if(t>300&&t<e.shoveT)amt*=
 const enemyCap=()=>(RAMP.cap+Math.min(160,Math.max(0,t-360)*0.25))*(AMBX()?0.5:1)*(1+0.5*(DIR-1));   // the room fills further after 6 minutes
 function spawning(dt){
   director(dt);if(revel())return;   // between songs the room stays clear
-  spawnAcc+=dt*(DARE==='swarm'?2:1)*(RAMP.spawn0+t/RAMP.spawn)*ty().spawn*VENUE.spawn*(AMBX()?0.5:1)*DIR*(guide.on&&guide.hits<6&&t<45?0.3:1);   // the first show ever starts gently until the beat clicks
+  spawnAcc+=dt*(DARE==='swarm'?2:1)*(TWIST==='packed'?1.4:1)*(RAMP.spawn0+t/RAMP.spawn)*ty().spawn*VENUE.spawn*(AMBX()?0.5:1)*DIR*(guide.on&&guide.hits<6&&t<45?0.3:1);   // the first show ever starts gently until the beat clicks
   while(spawnAcc>=1){
     spawnAcc-=1;if(enemies.length>enemyCap())continue;
     {const gm_=GENRE_MOB[SOUND];if(gm_&&t>50&&Math.random()<0.12){spawn(gm_);continue}}   // this sound's own noise, about one spawn in eight
+    {const ln=LEANS[sec().song];if(ln&&Math.random()<0.25&&t>({hum:0,hiss:45,squeal:75,clip:120}[ln])){if(ln==='hiss'){const a=Math.random()*6.283;for(let i=0;i<4;i++)spawn('hiss',a+rnd(-0.15,0.15))}else spawn(ln);continue}}   // this song's lean
     const r=Math.random();
     if(t>120&&r<0.11)spawn('clip');
     else if(t>75&&r<0.26)spawn('squeal');
     else if(t>45&&r<0.48){const a=Math.random()*6.283;for(let i=0;i<4;i++)spawn('hiss',a+rnd(-0.15,0.15))}
     else spawn('hum');
   }
-  puT+=dt;if(puT>=nextPU){puT=0;nextPU=feat('req')?rnd(85,105):rnd(60,80);dropPU(randomPU(),P.x,P.y,true)}   // power-ups also turn up near you: every 60-80 s, or 85-105 s once requests are the main source (a floor for players who skip them)
+  puT+=dt;if(puT>=nextPU&&TWIST!=='roadie'){puT=0;nextPU=feat('req')?rnd(85,105):rnd(60,80);dropPU(randomPU(),P.x,P.y,true)}   // power-ups also turn up near you: every 60-80 s, or 85-105 s once requests are the main source (a floor for players who skip them)
   vacT+=dt;if(vacT>=35){vacT=0;const a=Math.random()*6.283,r=rnd(220,380);gems.push({x:P.x+Math.cos(a)*r,y:P.y+Math.sin(a)*r,v:0,vac:true})}
 }
 
@@ -2357,9 +2393,9 @@ function update(dt){
   if(!REQ&&t>=reqNext&&state==='play'&&!revel()&&feat('req')){const a=Math.random()*6.283,d=rnd(300,450),kind=randomPU();
     REQ={x:P.x+Math.cos(a)*d,y:P.y+Math.sin(a)*d,got:0,life:REQ_LIFE,kind};toasts.push({s:'REQUEST · '+PUS[kind].name,sub:'Stand in the ring',col:PUS[kind].col,life:2});tip('req','REQUESTS','Stay in the ring to get the power-up the crowd is calling for')}
   if(REQ){REQ.life-=dt;const inR=Math.hypot(P.x-REQ.x,P.y-REQ.y)<REQ_R;if(inR)REQ.got+=dt;REQ.inR=inR;
-    if(REQ.got>=REQ_NEED){const q=REQ;REQ=null;reqDone++;reqNext=t+rnd(30,42);FX.bloom=1;if(AU.cheer)try{AU.cheer(0.6)}catch(e){}
+    if(REQ.got>=REQ_NEED){const q=REQ;REQ=null;reqDone++;reqNext=t+rnd(30,42)*(TWIST==='roadie'?0.5:1);FX.bloom=1;if(AU.cheer)try{AU.cheer(0.6)}catch(e){}
       if(q.kind==='melody')pickMic();else applyPU(q.kind)}
-    else if(REQ.life<=0){REQ=null;reqNext=t+rnd(18,26)}}
+    else if(REQ.life<=0){REQ=null;reqNext=t+rnd(18,26)*(TWIST==='roadie'?0.5:1)}}
   // FEEDBACK: hold still in a fight and the mic howls, like standing too close to a speaker. After STILL_GRACE s of barely
   // moving with noise nearby a howl builds; from STILL_HURT s it hurts, a little more each second; moving bleeds it off fast.
   {P.mv+=(Math.hypot(mx,my)*P.speed-P.mv)*Math.min(1,dt*4);
@@ -2467,7 +2503,7 @@ function knockout(cause){   // the end of the show, unless LEGENDS crowd-surf yo
   P.hp=0;deathCause=cause;endRun(false);return true}
 let XP_CURVE=1.35;   // how much XP each level costs, relative to the base curve (the first level stays at 3 XP)
 function gainXp(v){
-  P.xp+=v*(G.poly?1.25:1)*(1+0.5*(DIR-1))*(DARE==='swarm'?1.5:1);   // hype pays: up to +60% XP
+  P.xp+=v*(G.poly?1.25:1)*(1+0.5*(DIR-1))*(DARE==='swarm'?1.5:1)*(TWIST==='packed'?1.4:1);   // hype pays: up to +60% XP
   if(P.lvl>=10)discover('reroll');if(P.lvl>=25)discover('setlist');
   while(P.xp>=P.next&&pendingLevels<3){P.xp-=P.next;P.lvl++;P.next=Math.floor((5+P.lvl*3+Math.pow(P.lvl,1.5))*XP_CURVE);pendingLevels++}
 }
@@ -2646,16 +2682,32 @@ function applyBand(){
   return[null,null];   // SOLO: no tracks; the first level-up recruits an instrument
 }
 function start(){
-  applySound();AU.init();ENG.set=null;MIDI.rec={ev:[],meta:[]};MIDI.transport(0xFA);newSet();reset();
+  applySound();AU.init();ENG.set=null;MIDI.rec={ev:[],meta:[]};MIDI.transport(0xFA);if(!SET_READY||DEMO)newSet();SET_READY=false;reset();
   if(!DEMO)recordPlayed();
   const [focus,hint]=applyBand();recalcGrooves(false);rerolls=mlv('reroll');groove=grooveFloor();
   if(owns('roadcase'))dropPU(randomPU(),P.x,P.y,true);   // the road case: a power-up waiting at the start
   if(!DEMO)for(const k in FEAT_AT)if(META.shows===FEAT_AT[k])toasts.push({s:'NEW · '+FEAT_NAME[k][0],sub:FEAT_NAME[k][1],col:'#ffd166',life:4.5});   // a system arrives
-  ['title','end','pause','lvl','edit','studio'].forEach(id=>$(id).classList.add('hidden'));
+  if(TWIST)toasts.push({s:'TWIST · '+twistName(),sub:twistDesc(),col:'#ffd166',life:4});
+  ['title','pre','end','pause','lvl','edit','studio'].forEach(id=>$(id).classList.add('hidden'));
   $('seqBtn').classList.remove('hidden');$('pauseBtn').classList.remove('hidden');
   musicOn=true;nextStepTime=AU.now()+0.15;
   if(focus)openEditor(focus,hint);
   else{state='play';toasts.push({s:'NO BAND YET',sub:owns('maestro')?'':K('Hit the beat: SPACE','Tap the right side on the beat','Hit the beat: A'),col:'#ffd166',life:4})}
+}
+// THE SETLIST SCREEN: before every show (from the second), what's coming: the songs, their tempo, key and length, the noise
+// each favours, and the twist. The set rolled here is the one that plays.
+function preShow(){
+  if(DEMO)exitDemo();
+  if(!(META.shows>0)){start();return}   // the very first show goes straight in
+  newSet();SET_READY=true;keyShift=0;   // the last show's key change mustn't leak into the keys shown
+  const songs=[];for(let i=0;i<SETLIST.length;i++){const x=SETLIST[i];let so=songs[x.song];if(!so){so=songs[x.song]={title:x.songTitle,i,len:0}}so.len+=x.bars*(x.L/4)*60/x.bpm}
+  $('preTitle').textContent='TONIGHT · '+VENUE.name+(DAILY?' · DAILY':'');
+  $('preSongs').innerHTML=songs.map((so,n)=>{const ln=LEANS[n],x=SETLIST[so.i];
+    return `<div class="preSong"><b>${n+1} · ${so.title}</b><span class="m">${Math.round(x.bpm)} bpm · ${keyLabel(so.i)} · ${fmt(so.len)}</span><span class="ln">${ln?`<span style="color:${(SET.cb?BAND_COL_CB:BAND_COL)[BAND_ET[ln]]||'var(--accent)'}">${LEAN_OF[ln][0]}</span> · ${LEAN_OF[ln][1]}`:n===0?'Warm-up':''}</span></div>`}).join('');
+  $('preTwist').innerHTML=TWIST?`<b>TWIST · ${twistName()}</b><div class="small">${twistDesc()} · clear the show for +60 fans</div>`:'';
+  $('preKeys').textContent=K('Enter to play · Esc to go back','',PAD.used?'A to play · B to go back':'');
+  ['title','end','studio'].forEach(id=>$(id).classList.add('hidden'));$('pre').classList.remove('hidden');
+  state='pre';setTimeout(()=>{if(state!=='pre')return;if(PAD.used)padFocus($('preGo'));else $('preGo').focus({preventScroll:true})},0);
 }
 function fxOff(){   // power-up audio (overdrive, tape stop) and the feedback howl never outlive the show
   AU.howl(0);AU.crowd(0);if(AU.ctx)AU.tide(false,AU.ctx.currentTime);PU.overdrive=0;PU.tape=0;PU.spin=0;TAPE=1;if(AU.ctx){AU.drive(false);if(AU.mlp)AU.mlp.frequency.setTargetAtTime(20000,AU.ctx.currentTime,0.05)}
@@ -2666,7 +2718,7 @@ function endRun(won){
   const wasEndless=endless;if(AU.ctx)AU.wind(false,AU.ctx.currentTime);fxOff();dareUI(false);
   state=won?'won':'dead';musicOn=false;$('seqBtn').classList.add('hidden');$('pauseBtn').classList.add('hidden');
   const s=sec(),songs=SETLIST[SETLIST.length-1].song+1;
-  const hype=hypeN?hypeAcc/hypeN:1,earned=Math.round((sectionsPlayed*8+kills/25+bestStreak*0.5+reqDone*15+daresKept*25+(won&&DARE?25:0)+(won&&!wasEndless?120:0))*VENUE.fans*(owns('fanclub')?1.25:1)*(1+0.5*(hype-1)));   // a hyped show earns more fans
+  const hype=hypeN?hypeAcc/hypeN:1,earned=Math.round((sectionsPlayed*8+kills/25+bestStreak*0.5+reqDone*15+daresKept*25+(won&&DARE?25:0)+(won&&!wasEndless?120:0)+(won&&!wasEndless&&TWIST?60:0))*VENUE.fans*(owns('fanclub')?1.25:1)*(1+0.5*(hype-1)));   // a hyped show earns more fans
   const rank0=rankOf(META.earned||0);
   const rec=META.venues[VENUE.id]||(META.venues[VENUE.id]={best:0,cleared:false});
   let starFans=0;const starNews=[];
@@ -2701,6 +2753,7 @@ function endRun(won){
   if(reqDone)rows.push([`Requests ${reqDone}`,reqDone*15]);
   {const dk=daresKept+(won&&DARE?1:0);if(dk)rows.push([`Dares kept ${dk}`,dk*25])}
   if(won&&!wasEndless)rows.push(['Show cleared',120]);
+  if(won&&!wasEndless&&TWIST)rows.push(['Twist · '+twistName(),60]);
   rows.forEach(x=>x[1]=Math.round(x[1]*mult));
   const mx=[VENUE.fans!==1&&`venue ×${VENUE.fans}`,owns('fanclub')&&'fan club ×1.25',hype>1.005&&`hype ×${(1+0.5*(hype-1)).toFixed(2)}`+(recs.includes('hype')?nb:'')].filter(Boolean).join(' · ');
   for(const sn of starNews)rows.push([sn.replace(/ <span.*$/,''),+sn.match(/\+(\d+)/)[1]]);
@@ -2791,7 +2844,7 @@ function renderTitle(){
   if(META.refund){$('ctrls').insertAdjacentHTML('afterbegin',`<span style="color:var(--gold)">Retired gear refunded: +${META.refund} fans</span><br>`);delete META.refund;saveMeta()}
   $('metaLine').innerHTML=`<span style="color:var(--gold)">${META.fans} fans</span> · ${META.shows} show${META.shows===1?'':'s'} played · grooves discovered ${found}/${GROOVES.length}`;
 }
-function toTitle(){setTimeout(()=>{if(state==='title')themeStart()},0);if(state!=='end'&&state!=='won'&&state!=='dead')MIDI.transport(0xFC);if(AU.ctx)AU.wind(false,AU.ctx.currentTime);fxOff();['end','studio','pause'].forEach(id=>$(id).classList.add('hidden'));$('seqBtn').classList.add('hidden');$('pauseBtn').classList.add('hidden');state='title';musicOn=false;if(AU.ctx)AU.ctx.resume();renderTitle();$('title').classList.remove('hidden')}
+function toTitle(){setTimeout(()=>{if(state==='title')themeStart()},0);if(state!=='end'&&state!=='won'&&state!=='dead')MIDI.transport(0xFC);if(AU.ctx)AU.wind(false,AU.ctx.currentTime);fxOff();['end','studio','pause','pre'].forEach(id=>$(id).classList.add('hidden'));SET_READY=false;$('seqBtn').classList.add('hidden');$('pauseBtn').classList.add('hidden');state='title';musicOn=false;if(AU.ctx)AU.ctx.resume();renderTitle();$('title').classList.remove('hidden')}
 function encore(){
   endless=true;encoreN++;bpmAdd+=6;encoreSong();
   SB=0;SIB=0;schedDone=false;entry++;events=[];hitQ=[];melQ=[];beatTimes=[];nextStepTime=AU.now()+0.1;
@@ -2806,7 +2859,7 @@ function pause(on){if(on)$('midiDev').hidden=!midiPossible();if(on){$('hdrRow').
   if(on&&state==='play'){MIDI.transport(0xFC);state='paused';$('volR').value=SET.vol;$('volV').textContent=Math.round(SET.vol*100)+'%';$('offset').value=SET.offset;$('offsetV').textContent=SET.offset+' ms';$('offFit').disabled=HIT_OFFS.length<8;$('clickT').checked=SET.click;$('autoT').checked=!!SET.autoHit;$('fxT').checked=SET.fx;$('cbT').checked=!!SET.cb;$('pause').classList.remove('hidden');if(AU.ctx)AU.ctx.suspend()}
   else if(!on&&state==='paused'){$('pause').classList.add('hidden');if(AU.ctx)AU.ctx.resume();state='play';MIDI.transport(0xFB)}
 }
-$('play').onclick=start;$('again').onclick=start;$('endless').onclick=encore;
+$('play').onclick=preShow;$('again').onclick=preShow;$('preGo').onclick=()=>{if(state==='pre')start()};$('preBack').onclick=()=>{if(state==='pre'){$('pre').classList.add('hidden');SET_READY=false;toTitle()}};$('endless').onclick=encore;
 // Playtesting: wipe saved progress (fans, unlocks, venue clears, discovered grooves); settings are kept.
 // Two clicks within 3 s so it can't be hit by accident.
 let resetArm=-Infinity;
@@ -2908,8 +2961,10 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyE'&&!e.repeat&&state==='play')dropGo();
   if(state==='play'&&dareOffer&&/^Digit[123]$/.test(e.code)&&dareOffer[+e.code.slice(5)-1])takeDare(dareOffer[+e.code.slice(5)-1]);
   if(state==='levelup'&&/^Digit[1-4]$/.test(e.code))choose(+e.code.slice(5)-1);
-  if(state==='title'&&(e.code==='Enter'||e.code==='Space')){e.preventDefault();start()}
-  if((state==='won'||state==='dead')&&e.code==='Enter'&&!$('end').classList.contains('hidden')){e.preventDefault();start()}
+  if(state==='title'&&(e.code==='Enter'||e.code==='Space')){e.preventDefault();preShow()}
+  else if(state==='pre'&&(e.code==='Enter'||e.code==='Space')&&!e.repeat){e.preventDefault();start()}
+  else if(state==='pre'&&e.code==='Escape')$('preBack').click();
+  if((state==='won'||state==='dead')&&e.code==='Enter'&&!$('end').classList.contains('hidden')){e.preventDefault();preShow()}
   if(e.code.startsWith('Arrow'))e.preventDefault();
 });
 addEventListener('keyup',e=>{keys[e.code]=false});
@@ -2944,10 +2999,10 @@ const FX={tint:[255,113,206],aberr:0,flashT:0,hurt:0,bloom:0,baton:0,pops:[],not
 // The HUD and menus stay sharp on top, in a pixel font. It holds in the Observatory too (its aurora goes 8-bit); the other
 // sounds' looks still give way to the Observatory's soft one.
 const chipLook=()=>SOUND==='chip';
-const genLook=()=>SOUND==='fm16'&&!(state!=='title'&&SETLIST[HS]&&SETLIST[HS].amb);   // 16-bit: the smooth neon graphics (not pixelated), without the background glow
+const genLook=()=>SOUND==='fm16'&&!(!TITLEISH()&&SETLIST[HS]&&SETLIST[HS].amb);   // 16-bit: the smooth neon graphics (not pixelated), without the background glow
 const pixLook=()=>chipLook();
-const raveLook=()=>SOUND==='rave'&&!(state!=='title'&&SETLIST[HS]&&SETLIST[HS].amb);
-const tranceLook=()=>SOUND==='trance'&&!(state!=='title'&&SETLIST[HS]&&SETLIST[HS].amb);   // trance: deep navy, a cool light that pulses with the kick   // rave: a dark warehouse with lasers   // only 8-bit goes through the pixel buffer
+const raveLook=()=>SOUND==='rave'&&!(!TITLEISH()&&SETLIST[HS]&&SETLIST[HS].amb);
+const tranceLook=()=>SOUND==='trance'&&!(!TITLEISH()&&SETLIST[HS]&&SETLIST[HS].amb);   // trance: deep navy, a cool light that pulses with the kick   // rave: a dark warehouse with lasers   // only 8-bit goes through the pixel buffer
 const NES='7C7C7C 0000FC 0000BC 4428BC 940084 A80020 A81000 881400 503000 007800 006800 005800 004058 000000 BCBCBC 0078F8 0058F8 6844FC D800CC E40058 F83800 E45C10 AC7C00 00B800 00A800 00A844 008888 F8F8F8 3CBCFC 6888FC 9878F8 F878F8 F85898 F87858 FCA044 F8B800 B8F818 58D854 58F898 00E8D8 787878 FCFCFC A4E4FC B8B8F8 D8B8F8 F8B8F8 F8A4C0 F0D0B0 FCE0A8 F8D878 D8F878 B8F8B8 B8F8D8 00FCFC F8D8F8'.split(' ').map(h=>[0,2,4].map(i=>parseInt(h.slice(i,i+2),16)));
 let NES_LUT=null;
 function nesLut(){   // 15-bit colour -> nearest NES colour ("redmean" distance), packed for little-endian RGBA writes
@@ -3014,7 +3069,7 @@ function drawTrail(pcr,now){
   g.restore();
 }
 function fxStep(dt){
-  const target=state==='title'?[255,113,206]:(sec().amb?AMB_TINTS:TINTS)[sec().type]||TINTS.verse,k=1-Math.exp(-dt*2.2);
+  const target=TITLEISH()?[255,113,206]:(sec().amb?AMB_TINTS:TINTS)[sec().type]||TINTS.verse,k=1-Math.exp(-dt*2.2);
   for(let i=0;i<3;i++)FX.tint[i]+=(target[i]-FX.tint[i])*k;
   FX.aberr*=Math.pow(0.03,dt);FX.flashT*=Math.pow(0.02,dt);FX.hurt*=Math.pow(0.02,dt);
   for(const n of FX.notes){n.life-=dt;n.y-=34*dt}FX.notes=FX.notes.filter(n=>n.life>0);if(FX.notes.length>40)FX.notes.splice(0,FX.notes.length-40);
@@ -3068,7 +3123,7 @@ function postFX(){
 }
 function background(T,amt){
   const tc=`${T[0]|0},${T[1]|0},${T[2]|0}`;
-  if(chipLook()){const s=state!=='title'&&sec(),big=s&&(s.type==='chorus'||s.type==='finale')&&!REDUCED;g.fillStyle=big&&amt>0.8?`rgb(${T[0]*0.3|0},${T[1]*0.3|0},${T[2]*0.3|0})`:'#000';g.fillRect(0,0,W,H);return tc}   // NES black; choruses flash dark on the beat
+  if(chipLook()){const s=!TITLEISH()&&sec(),big=s&&(s.type==='chorus'||s.type==='finale')&&!REDUCED;g.fillStyle=big&&amt>0.8?`rgb(${T[0]*0.3|0},${T[1]*0.3|0},${T[2]*0.3|0})`:'#000';g.fillRect(0,0,W,H);return tc}   // NES black; choruses flash dark on the beat
   if(!skyCache||skyCache.h!==H){const sk=g.createLinearGradient(0,0,0,H);sk.addColorStop(0,'#0a011c');sk.addColorStop(0.55,'#170536');sk.addColorStop(1,'#33084e');skyCache={h:H,sk}}
   if(genLook()){g.fillStyle='#0a0424';g.fillRect(0,0,W,H);return tc}
   if(raveLook()){g.fillStyle='#040406';g.fillRect(0,0,W,H);lasers(0.5+amt*0.9,tc);return tc}
@@ -3281,7 +3336,7 @@ function drawNoise(e,r,now){
 }
 function draw(){
   const chip=chipLook(),pix=pixLook();
-  if(state==='title'){if(chip){pxBegin();drawTitleChip();pxEnd()}else if(pix){pxBegin();drawTitleBg();pxEnd()}else{drawTitleBg();postFX()}return}
+  if(TITLEISH()){if(chip){pxBegin();drawTitleChip();pxEnd()}else if(pix){pxBegin();drawTitleBg();pxEnd()}else{drawTitleBg();postFX()}return}
   if(pix)pxBegin();
   const pocket=groove>=8,T=FX.tint,tc=background(T,beatPulse);
   if(sec().amb)aurora();
@@ -3844,7 +3899,7 @@ function padHoldPress(el){
   const was=ci.tr.beats[ci.beat].hits[ci.k];el.click();
   if(!was&&ci.tr.beats[ci.beat].hits[ci.k]===1){PAD.hold={tr:ci.tr,beat:ci.beat,k:ci.k,p:ci.p};renderEditor();refocus(ci.tr,ci.beat,'cell',ci.k);holdHint()}
   return true}
-function padBack(){if(PAD.hold){PAD.hold=null;renderEditor();holdHint();return}if(state==='edit')closeEditor();else if(state==='paused')pause(false);else if(!$('studio').classList.contains('hidden'))toTitle();else if(state==='won'||state==='dead')toTitle()}
+function padBack(){if(state==='pre'){$('preBack').click();return}if(PAD.hold){PAD.hold=null;renderEditor();holdHint();return}if(state==='edit')closeEditor();else if(state==='paused')pause(false);else if(!$('studio').classList.contains('hidden'))toTitle();else if(state==='won'||state==='dead')toTitle()}
 function padStep(){
   let gps=[];try{gps=navigator.getGamepads?navigator.getGamepads():[]}catch(e){}let gp=null;   // a page that blocks controllers can throw here: then there are simply nonefor(const x of gps)if(x&&x.connected&&x.mapping==='standard'){gp=x;break}
   if(!gp)for(const x of gps)if(x&&x.connected){gp=x;break}
@@ -3852,7 +3907,7 @@ function padStep(){
   const btn=i=>!!(gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>0.5)),down=i=>btn(i)&&!PAD.prev[i];
   let x=gp.axes[0]||0,y=gp.axes[1]||0;const m=Math.hypot(x,y);if(m<0.22){x=0;y=0}else{const k=Math.min(1,(m-0.22)/0.78)/m;x*=k;y*=k}   // dead zone, rescaled
   if(btn(PB.LEFT))x=-1;if(btn(PB.RIGHT))x=1;if(btn(PB.UP))y=-1;if(btn(PB.DOWN))y=1;
-  const any=gp.buttons.some(b=>b.pressed)||m>0.5;if(any){lastInput=performance.now();if(!PAD.used){PAD.used=true;if(state==='title')renderTitle()}if(DEMO){exitDemo();PAD.prev=gp.buttons.map(b=>b.pressed||b.value>0.5);return}}
+  const any=gp.buttons.some(b=>b.pressed)||m>0.5;if(any){lastInput=performance.now();if(!PAD.used){PAD.used=true;if(state==='title')renderTitle();if(dareOffer&&!$('dares').classList.contains('hidden'))dareUI(true)}if(DEMO){exitDemo();PAD.prev=gp.buttons.map(b=>b.pressed||b.value>0.5);return}}
   if(state==='play'){PAD.x=x;PAD.y=y;
     const heard=AU.ctx?AU.now()-AU.lat()-clamp((performance.now()-gp.timestamp)/1000,0,0.1):0;   // when it was pressed, not when we noticed
     if(down(PB.A)||down(PB.RT))hit(heard);if(down(PB.B))dash(heard);if(down(PB.X))dropGo();if(down(PB.Y))openEditor(null);if(down(PB.START))pause(true);
@@ -3871,7 +3926,7 @@ function padStep(){
           if(a&&a!==document.body)padFocus(a)},0)}
       else padMove(0,1)}
     if(down(PB.B))padBack();if(down(PB.Y)&&state==='edit')closeEditor();
-    if(down(PB.START)){if(state==='paused')pause(false);else if(state==='title')start()}}
+    if(down(PB.START)){if(state==='paused')pause(false);else if(state==='title')preShow();else if(state==='pre')start()}}
   PAD.last=state;PAD.prev=gp.buttons.map(b=>b.pressed||b.value>0.5)}
 // SAFETY NET: an error in one frame used to stop the frame loop for good (the picture froze while menus still worked);
 // now it costs that frame, is logged once, and the game carries on
@@ -3881,7 +3936,7 @@ function loopBody(ts){
   const dt=Math.max(0,Math.min(0.033,(ts-lastT)/1000));lastT=ts;
   demoIdle();demoStep(dt);
   if(state==='play'||state==='levelup'||state==='edit')pump();
-  if(state==='title'&&TH.on)themePump();else if(state!=='title'&&TH.on)themeStop();
+  if((state==='title'||state==='pre')&&TH.on)themePump();else if(state!=='title'&&state!=='pre'&&TH.on)themeStop();
   MIDI.tape();
   {const lv=state==='play'?(revel()?1:hypeLv())*(SOUND==='ambient'?0.5:1):0;AU.crowd(lv);   // the crowd follows the hype (and roars between songs)
    if(state==='play'&&lv>0.25&&!revel()&&Math.random()<dt*0.06*lv&&AU.ctx)AU.cheer(AU.soon(),0.4+0.6*lv)}
