@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Phone Bench</title>
+<style>
+/* Phone test bench for Feedback Loop. Serve the project and open /tools/phone.html?lan=<this computer's IP>:8766.
+   A real phone needs the feedback-loop-phone server (port 8766, bound to 0.0.0.0): the feedback-loop one (8765) only answers
+   this computer.
+   The game runs with ?touch, so the mouse acts as one finger: drag on the left half to move, click the right half to hit,
+   double-click the left half to dash. Keys still work when the frame has focus.
+   Browser mode (default): the game gets what a phone browser leaves it, the screen minus status bar and the browser's
+   address and tool bars (approximate per device; Safari keeps the notch out of the page). Full screen mode: the whole screen
+   with notch, status bar and home indicator drawn over it, as a home-screen install that drew under them would look. */
+:root{--bg:#101014;--panel:#18181f;--line:#2c2c38;--fg:#e9e7f2;--dim:#9a97ab;--acc:#ffd166}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.5 ui-monospace,Menlo,monospace;min-height:100vh;display:flex;flex-direction:column}
+header{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
+header b{color:var(--acc);letter-spacing:.08em}
+label{display:flex;gap:6px;align-items:center;color:var(--dim)}
+select,button,input[type=text]{font:inherit;background:#22222c;color:var(--fg);border:1px solid var(--line);border-radius:4px;padding:4px 8px}
+button{cursor:pointer}button:hover{border-color:var(--acc)}
+main{flex:1;display:flex;gap:24px;padding:20px 16px;align-items:flex-start;justify-content:center;flex-wrap:wrap;min-width:0}
+.stage{display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.dims{color:var(--dim)}
+.phone{position:relative;background:#000;border:10px solid #2a2a33;border-radius:38px;box-shadow:0 0 0 1px #3a3a46,0 20px 60px #0008;overflow:hidden;transform-origin:top center}
+.phone iframe{position:absolute;display:block;border:0;background:#000}
+.ov.bar{background:#1d1d24;display:flex;align-items:center;justify-content:center}.ov.bar span{background:#2e2e38;color:#c9c7d6;border-radius:10px;padding:3px 14px;font:12px -apple-system,system-ui,sans-serif}
+.ov{position:absolute;pointer-events:none;background:#000}
+.ov.status{left:0;right:0;top:0;background:linear-gradient(#000c,#0000);display:flex;justify-content:space-between;padding:0 22px;align-items:center;font:600 12px -apple-system,system-ui,sans-serif;color:#fff}
+.ov.notch{left:50%;transform:translateX(-50%);border-radius:0 0 16px 16px}
+.ov.island{left:50%;transform:translateX(-50%);border-radius:20px}
+.ov.home{left:50%;transform:translateX(-50%);width:134px;height:5px;border-radius:3px;background:#fffc}
+.ov.cam{border-radius:50%}
+.side{max-width:280px;display:flex;flex-direction:column;gap:12px;color:var(--dim)}
+.side h3{margin:0;color:var(--fg);font-size:13px;letter-spacing:.06em}
+#qr{background:#fff;padding:8px;width:max-content;border-radius:4px}
+code{color:var(--fg);word-break:break-all}
+</style>
+</head>
+<body>
+<header>
+  <b>PHONE BENCH</b>
+  <label>Device <select id="dev"></select></label>
+  <button id="rot">Rotate</button>
+  <label>Mode <select id="mode"><option value="browser">Browser</option><option value="full">Full screen</option></select></label>
+  <label>Zoom <select id="zoom"><option value="1">100%</option><option value="0.85">85%</option><option value="0.7">70%</option><option value="0.55">55%</option></select></label>
+  <label><input type="checkbox" id="pt" checked> #playtest (dev tools)</label>
+  <button id="reload">Reload game</button>
+</header>
+<main>
+  <div class="stage"><div class="dims" id="dims"></div><div id="phone" class="phone"><iframe id="game" title="Feedback Loop on a phone" allow="autoplay"></iframe></div></div>
+  <div class="side">
+    <h3>MOUSE AS A FINGER</h3>
+    <div>Drag on the left half to move · click the right half to hit the beat · double-click the left half to dash · click DROP and SEQ like buttons. One mouse is one finger: moving and hitting at once needs the keyboard (click the frame first).</div>
+    <h3>ON YOUR REAL PHONE</h3>
+    <div>Same Wi-Fi (or the phone's own hotspot) as this computer, then open:</div>
+    <code id="lanUrl"></code>
+    <label>Computer's address <input type="text" id="lan" size="18"></label>
+    <div id="qr"></div>
+    <div>macOS may ask once whether Python can accept incoming connections: allow it. The frame here and the phone share nothing; each browser keeps its own save.</div>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// CSS sizes of real phone screens and what covers them: [name, width, height, status bar, cutout, home indicator, browser]
+// browser: what Safari / Chrome take, portrait p:[top, bottom] and landscape l:[top, bottom, each side] (approximate: iOS Safari
+// with its bottom bar, Chrome with its address bar on top; Safari insets both sides in landscape on phones with a notch)
+const DEVICES=[
+  ['iPhone SE',375,667,20,null,false,{p:[20,99],l:[44,0,0]}],
+  ['iPhone 13 mini',375,812,44,{k:'notch',w:162,h:32},true,{p:[44,139],l:[50,21,44]}],
+  ['iPhone 15',393,852,54,{k:'island',w:126,h:37,top:11},true,{p:[54,139],l:[50,21,59]}],
+  ['iPhone 15 Pro Max',430,932,54,{k:'island',w:126,h:37,top:11},true,{p:[54,139],l:[50,21,59]}],
+  ['Pixel 8',412,915,32,{k:'cam',w:22,h:22,top:12},false,{p:[88,24],l:[56,0,0]}],
+  ['Galaxy S23',360,780,30,{k:'cam',w:18,h:18,top:10},false,{p:[86,48],l:[56,0,0]}],
+  ['Galaxy A14 (small Android)',360,640,24,null,false,{p:[80,48],l:[56,0,0]}]
+];
+const $=id=>document.getElementById(id),q=new URLSearchParams(location.search);
+let land=false;
+const store=(k,v)=>{try{v===undefined?v=localStorage.getItem('pb_'+k):localStorage.setItem('pb_'+k,v)}catch(e){}return v};
+DEVICES.forEach((d,i)=>$('dev').add(new Option(`${d[0]} · ${d[1]}×${d[2]}`,i)));
+$('dev').value=store('dev')||2;$('mode').value=store('mode')||'browser';$('zoom').value=store('zoom')||'0.85';
+function src(){return '../index.html?touch'+($('pt').checked?'#playtest':'')}
+function layout(){
+  const d=DEVICES[+$('dev').value],w=land?d[2]:d[1],h=land?d[1]:d[2],z=+$('zoom').value,ph=$('phone'),full=$('mode').value==='full',fr=$('game');
+  ph.style.width=w+20+'px';ph.style.height=h+20+'px';ph.style.transform=`scale(${z})`;ph.style.marginBottom=`${(h+20)*(z-1)}px`;
+  ph.querySelectorAll('.ov').forEach(e=>e.remove());
+  const add=(cls,css,html)=>{const e=document.createElement('div');e.className='ov '+cls;Object.assign(e.style,css);if(html)e.innerHTML=html;ph.appendChild(e);return e};
+  // the page's box: the whole screen, or what the browser leaves
+  const b=full?[0,0,0]:land?d[6].l:[...d[6].p,0],vw=w-2*b[2],vh=h-b[0]-b[1];
+  Object.assign(fr.style,{left:b[2]+'px',top:b[0]+'px',width:vw+'px',height:vh+'px'});
+  $('dims').textContent=`${d[0]}${land?' · landscape':''} · page ${vw}×${vh} CSS px${full?' (full screen)':' in the browser (approx.)'}`;
+  if(!full){   // the browser's own bars, around the page
+    const ip=$('lan').value.trim()||'localhost';
+    if(!land){add('bar',{left:0,right:0,top:0,height:d[3]+'px',background:'#000'});
+      if(b[0]>d[3])add('bar',{left:0,right:0,top:d[3]+'px',height:b[0]-d[3]+'px'},`<span>${ip}</span>`);
+      add('bar',{left:0,right:0,bottom:0,height:b[1]+'px'},d[6].p[1]>60?`<span>${ip}</span>`:'')}
+    else{if(b[0])add('bar',{left:0,right:0,top:0,height:b[0]+'px'},`<span>${ip}</span>`);if(b[1])add('bar',{left:0,right:0,bottom:0,height:b[1]+'px',background:'#000'});
+      if(b[2]){add('bar',{left:0,top:0,bottom:0,width:b[2]+'px',background:'#000'});add('bar',{right:0,top:0,bottom:0,width:b[2]+'px',background:'#000'})}}}
+  else if(!land)add('status',{height:d[3]+'px',top:0,left:0,right:0},'<span>9:41</span><span>●●● ▮</span>');
+  const c=d[4];
+  if(!land){
+    if(c&&c.k==='notch')add('notch',{top:0,width:c.w+'px',height:c.h+'px'});
+    if(c&&c.k==='island')add('island',{top:c.top+'px',width:c.w+'px',height:c.h+'px'});
+    if(c&&c.k==='cam')add('cam',{top:c.top+'px',left:`calc(50% - ${c.w/2}px)`,width:c.w+'px',height:c.h+'px'});
+  }else if(c){   // landscape: the cutout sits on the left edge
+    if(c.k==='notch')add('notch',{left:0,top:'50%',transform:'translateY(-50%)',width:c.h+'px',height:c.w+'px',borderRadius:'0 16px 16px 0'});
+    if(c.k==='island')add('island',{left:c.top+'px',top:'50%',transform:'translateY(-50%)',width:c.h+'px',height:c.w+'px'});
+    if(c.k==='cam')add('cam',{left:c.top+'px',top:`calc(50% - ${c.w/2}px)`,width:c.w+'px',height:c.h+'px'});
+  }
+  if(d[5])add('home',{bottom:'8px',width:land?'200px':'134px'});
+}
+function load(){$('game').src=src()}
+$('dev').onchange=()=>{store('dev',$('dev').value);land=false;layout();load()};
+$('rot').onclick=()=>{land=!land;layout();load()};   // reload so the game sizes itself for the new shape
+$('mode').onchange=()=>{store('mode',$('mode').value);layout();load()};$('zoom').onchange=()=>{store('zoom',$('zoom').value);layout()};
+$('pt').onchange=load;$('reload').onclick=load;
+// the real-phone link: this page's host when it isn't localhost, else ?lan=<ip:port> or what was typed last
+function lan(){
+  const h=location.hostname,def=(h!=='localhost'&&h!=='127.0.0.1')?location.host:(q.get('lan')||store('lan')||'');
+  if(!$('lan').value)$('lan').value=def;const v=$('lan').value.trim();store('lan',v);
+  const url=v?`http://${v.includes(':')?v:v+':'+(location.port||80)}/`:'';$('lanUrl').textContent=url||'(type the computer\'s address below)';
+  $('qr').innerHTML='';if(url&&window.QRCode)new QRCode($('qr'),{text:url,width:160,height:160});$('qr').style.display=url?'':'none'}
+$('lan').oninput=lan;
+layout();load();lan();
+</script>
+</body>
+</html>
